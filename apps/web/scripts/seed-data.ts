@@ -53,6 +53,20 @@ export const SUBJECTS: SubjectSeed[] = [
     ],
   },
   {
+    // PROVISIONAL topic list — check against the 4MB1 specification and refine in the admin UI.
+    board: "edexcel",
+    qualification: "International GCSE",
+    name: "Mathematics B",
+    specCode: "4MB1",
+    topics: [
+      t("1", "Number"), t("2", "Algebra"), t("3", "Sets"),
+      t("4", "Functions, graphs and calculus"), t("5", "Matrices"),
+      t("6", "Geometry and trigonometry"), t("7", "Mensuration"),
+      t("8", "Vectors and transformation geometry"),
+      t("9", "Statistics and probability"),
+    ],
+  },
+  {
     board: "edexcel",
     qualification: "International GCSE",
     name: "Physics",
