@@ -5,13 +5,30 @@ import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 
+/**
+ * Only the site's origin is used from BETTER_AUTH_URL. If it carried a path (e.g. pasted as
+ * ".../login"), the auth library would serve its routes under that path and every sign-in would
+ * 404 — so the path is dropped and the routes are pinned to /api/auth.
+ */
+function siteOrigin(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    return new URL(raw.trim()).origin;
+  } catch {
+    return undefined;
+  }
+}
+const ORIGIN = siteOrigin(process.env.BETTER_AUTH_URL);
+
 export const PENDING_MESSAGE = "Your account is waiting for an administrator to approve it. Please try again later.";
 
 export const auth = betterAuth({
   appName: "Papersmith",
+  baseURL: ORIGIN,
+  basePath: "/api/auth",
   // Sign-in requests are accepted from the site's own address (BETTER_AUTH_URL) and, on Vercel,
   // from this deployment's own URL (preview deployments).
-  trustedOrigins: [process.env.BETTER_AUTH_URL, process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`].filter(
+  trustedOrigins: [ORIGIN, process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`].filter(
     (x): x is string => Boolean(x),
   ),
   database: drizzleAdapter(db, {
