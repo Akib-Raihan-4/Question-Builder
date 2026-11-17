@@ -1,9 +1,8 @@
 import type { PaperHeader } from "@/db/schema";
 import { itemMarks, itemRegions, totalMarks, type Bank, type Item } from "@/lib/builder/model";
+import { processorFetch } from "@/lib/processor";
 
 export type DocxMode = "pictures" | "editable";
-
-const processorUrl = () => process.env.PROCESSOR_URL ?? "http://localhost:8000";
 
 /**
  * Word export runs in the processor (PyMuPDF renders/reads the original PDFs; python-docx writes
@@ -42,7 +41,7 @@ export async function buildPaperDocx(input: {
     const bytes = await input.loadSource(paperId);
     form.append(`pdf_${paperId}`, new Blob([bytes as BlobPart], { type: "application/pdf" }), `${paperId}.pdf`);
   }
-  const res = await fetch(`${processorUrl()}/export/docx`, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
+  const res = await processorFetch("/export/docx", { method: "POST", body: form });
   if (!res.ok) throw new Error(`Word export failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   return new Uint8Array(await res.arrayBuffer());
 }

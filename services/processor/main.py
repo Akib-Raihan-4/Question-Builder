@@ -1,6 +1,8 @@
+import hmac
 import json
+import os
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
 from cover import read_cover
@@ -8,7 +10,15 @@ from docx_export import DocxSpec, build_docx
 from parsers import PARSERS, get_parser
 from parsers.base import SegmentResult
 
-app = FastAPI(title="Papersmith processor")
+def require_key(x_processor_key: str | None = Header(default=None)) -> None:
+    """When PROCESSOR_KEY is set (always, when hosted), every call except /health must send it.
+    The processor handles copyrighted papers, so it must not be usable by anyone who finds it."""
+    expected = os.environ.get("PROCESSOR_KEY")
+    if expected and not hmac.compare_digest(x_processor_key or "", expected):
+        raise HTTPException(401, "Missing or wrong X-Processor-Key")
+
+
+app = FastAPI(title="Papersmith processor", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.get("/health")
@@ -16,7 +26,7 @@ def health() -> dict:
     return {"ok": True, "parsers": {k: p.version for k, p in PARSERS.items()}}
 
 
-@app.post("/segment/qp", response_model=SegmentResult)
+@app.post("/segment/qp", response_model=SegmentResult, dependencies=[Depends(require_key)])
 async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) -> SegmentResult:
     try:
         parser = get_parser(parser_key)
@@ -28,7 +38,7 @@ async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) 
     return parser.segment(data)
 
 
-@app.post("/inspect")
+@app.post("/inspect", dependencies=[Depends(require_key)])
 async def inspect(file: UploadFile = File(...)) -> dict:
     """Paper details read from the cover page, to pre-fill the upload form."""
     data = await file.read()
@@ -37,7 +47,7 @@ async def inspect(file: UploadFile = File(...)) -> dict:
     return read_cover(data)
 
 
-@app.post("/export/docx")
+@app.post("/export/docx", dependencies=[Depends(require_key)])
 async def export_docx(request: Request) -> Response:
     """Build a .docx: form field `spec` (JSON, see docx_export.DocxSpec) + one file per source
     paper named `pdf_<paper_id>`."""

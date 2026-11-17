@@ -26,12 +26,10 @@ export function BuilderScreen({ paper, sources }: Props) {
     try {
       await saveRef.current?.(); // export what's on screen
       const res = await fetch(`/api/built-papers/${paper.id}/export?${query}`);
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Export failed");
-      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "paper";
-      const url = URL.createObjectURL(await res.blob());
-      const a = Object.assign(document.createElement("a"), { href: url, download: name });
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.url) throw new Error(body.error ?? "Export failed");
+      // A private link that expires in a few minutes; the browser saves the file.
+      window.location.assign(body.url);
     } catch (e) {
       alert((e as Error).message);
     } finally {

@@ -1,0 +1,14 @@
+# Render blueprint for the Python processor (the website itself goes on Vercel).
+# Render → New → Blueprint → pick this repo. Set PROCESSOR_KEY to the same value as in Vercel.
+services:
+  - type: web
+    name: papersmith-processor
+    runtime: docker
+    rootDir: services/processor
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PROCESSOR_KEY
+        sync: false

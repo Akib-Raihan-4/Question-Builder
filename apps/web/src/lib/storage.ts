@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
  * Private object storage (Backblaze B2 / MinIO / any S3). Objects are NEVER exposed by URL;
@@ -49,4 +50,26 @@ export async function getObjectStream(key: string) {
 
 export async function deleteObject(key: string) {
   await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+}
+
+export async function putFile(key: string, bytes: Uint8Array, contentType: string) {
+  await client().send(new PutObjectCommand({ Bucket: bucket(), Key: key, Body: bytes, ContentType: contentType }));
+}
+
+/**
+ * A private, short-lived download link (default 5 minutes) that makes the browser save the file
+ * under `filename`. Used for exports, which can be larger than a hosting response allows.
+ */
+export async function signedDownloadUrl(key: string, filename: string, contentType: string, seconds = 300) {
+  return getSignedUrl(
+    client(),
+    new GetObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      ResponseContentType: contentType,
+      ResponseContentDisposition: `attachment; filename="${filename}"`,
+      ResponseCacheControl: "private, no-store",
+    }),
+    { expiresIn: seconds },
+  );
 }

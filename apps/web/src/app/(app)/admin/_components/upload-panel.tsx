@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { unzipSync } from "fflate";
 import { parsePaperFilename, SERIES } from "@/lib/paper-filename";
+import { matchSubject, MAX_UPLOAD_BYTES } from "@/lib/papers/match";
 import { cn } from "@/lib/utils";
 
 export type Subject = { id: string; name: string; specCode: string; qualification: string };
@@ -56,7 +58,7 @@ export function UploadPanel({ subjects, defaultSubjectId }: { subjects: Subject[
         </div>
       </CardHeader>
       <CardContent>
-        {mode === "zip" ? <ZipUpload /> : <SingleUpload subjects={subjects} defaultSubjectId={defaultSubjectId} />}
+        {mode === "zip" ? <ZipUpload subjects={subjects} /> : <SingleUpload subjects={subjects} defaultSubjectId={defaultSubjectId} />}
       </CardContent>
     </Card>
   );
@@ -82,7 +84,12 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
 
   async function onFile(file: File | undefined) {
     setNote(null);
+    setMsg(null);
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setMsg({ ok: false, text: `This PDF is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 4.4 MB. Compress it (e.g. "Reduce file size" in Preview or an online PDF compressor) and try again.` });
+      return;
+    }
     const meta = parsePaperFilename(file.name);
     if (meta) {
       const s = subjects.find((x) => x.specCode === meta.specCode);
@@ -186,26 +193,78 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
   );
 }
 
-function ZipUpload() {
+/**
+ * ZIP upload, unzipped in the browser: each PDF is uploaded as its own small request (hosting
+ * limits request bodies to ~4.5 MB). Details come from the file name, else from the cover page.
+ */
+function ZipUpload({ subjects }: { subjects: Subject[] }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<BulkRow[] | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  async function uploadOne(name: string, bytes: Uint8Array): Promise<BulkRow> {
+    if (bytes.length > MAX_UPLOAD_BYTES) return { file: name, ok: false, message: "Skipped: larger than 4.4 MB" };
+    const file = new File([bytes as BlobPart], name, { type: "application/pdf" });
+    let meta = parsePaperFilename(name);
+    let subjectId = meta ? matchSubject(meta.paperCode, subjects)?.id : undefined;
+    if (!meta || !subjectId) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/papers/inspect", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+      const c = body.cover;
+      if (c?.paper_code && c.series && c.year) {
+        meta = { specCode: "", paperCode: c.paper_code, series: c.series, year: c.year, tier: c.tier ?? null };
+        subjectId = body.subjectId ?? undefined;
+      }
+    }
+    if (!meta) return { file: name, ok: false, message: "Skipped: couldn't tell the paper code/series/year — upload it on its own" };
+    if (!subjectId) return { file: name, ok: false, message: `Skipped: no subject for ${meta.paperCode} — add the subject first` };
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("subjectId", subjectId);
+    fd.append("paperCode", meta.paperCode);
+    fd.append("series", meta.series);
+    fd.append("year", String(meta.year));
+    fd.append("tier", meta.tier ?? "");
+    fd.append("autoDetect", String(autoDetect));
+    const res = await fetch("/api/admin/papers", { method: "POST", body: fd });
+    const body = await res.json().catch(() => ({}));
+    return res.ok
+      ? { file: name, ok: true, message: `${meta.paperCode} ${meta.series} ${meta.year}` }
+      : { file: name, ok: false, message: body.error ?? "Upload failed" };
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
+    const zip = (form.elements.namedItem("file") as HTMLInputElement).files?.[0];
+    if (!zip) return;
     setPending(true);
     setError(null);
-    setRows(null);
-    const fd = new FormData(form);
-    fd.set("autoDetect", String(autoDetect));
-    const res = await fetch("/api/admin/papers/bulk", { method: "POST", body: fd });
-    const body = await res.json().catch(() => ({}));
+    setRows([]);
+    let entries: Record<string, Uint8Array>;
+    try {
+      entries = unzipSync(new Uint8Array(await zip.arrayBuffer()), {
+        filter: (f) => f.name.toLowerCase().endsWith(".pdf") && !f.name.includes("__MACOSX/"),
+      });
+    } catch {
+      setPending(false);
+      return setError("Could not read the ZIP file");
+    }
+    const files = Object.entries(entries).sort(([a], [b]) => a.localeCompare(b));
+    const done: BulkRow[] = [];
+    for (const [i, [path, bytes]] of files.entries()) {
+      const name = path.split("/").pop()!;
+      setProgress(`Uploading ${i + 1} of ${files.length}: ${name}`);
+      done.push(await uploadOne(name, bytes));
+      setRows([...done]);
+    }
+    setProgress(null);
     setPending(false);
-    if (!res.ok) return setError(body.error ?? "Upload failed");
-    setRows(body.results);
     form.reset();
     router.refresh();
   }
@@ -218,14 +277,14 @@ function ZipUpload() {
             <Label htmlFor="zip">ZIP file</Label>
             <Input id="zip" name="file" type="file" accept=".zip,application/zip" required />
           </div>
-          <Button type="submit" disabled={pending}>{pending ? "Uploading… this can take a minute" : "Upload ZIP"}</Button>
+          <Button type="submit" disabled={pending}>{pending ? "Uploading…" : "Upload ZIP"}</Button>
         </div>
         <AutoDetect value={autoDetect} onChange={setAutoDetect} />
       </form>
+      {progress && <p className="text-sm text-muted-foreground">{progress}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {rows && (
+      {rows && rows.length > 0 && (
         <ul className="divide-y rounded-lg border text-sm">
-          {rows.length === 0 && <li className="p-3 text-muted-foreground">No PDFs found in the ZIP.</li>}
           {rows.map((r) => (
             <li key={r.file} className="flex gap-3 p-3">
               <span className={r.ok ? "text-emerald-600" : "text-amber-600"}>{r.ok ? "✓" : "!"}</span>
@@ -235,6 +294,7 @@ function ZipUpload() {
           ))}
         </ul>
       )}
+      {rows && rows.length === 0 && !pending && <p className="text-sm text-muted-foreground">No PDFs found in the ZIP.</p>}
     </div>
   );
 }

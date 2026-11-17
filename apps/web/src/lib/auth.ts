@@ -9,6 +9,11 @@ export const PENDING_MESSAGE = "Your account is waiting for an administrator to 
 
 export const auth = betterAuth({
   appName: "Papersmith",
+  // Sign-in requests are accepted from the site's own address (BETTER_AUTH_URL) and, on Vercel,
+  // from this deployment's own URL (preview deployments).
+  trustedOrigins: [process.env.BETTER_AUTH_URL, process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`].filter(
+    (x): x is string => Boolean(x),
+  ),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {

@@ -4,6 +4,8 @@ import { createPaper } from "@/lib/papers/create";
 import type { Series } from "@/lib/paper-filename";
 
 export const runtime = "nodejs";
+// Finding questions runs after the response (see lib/jobs/run.ts) and needs time.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const u = await apiUser("admin");

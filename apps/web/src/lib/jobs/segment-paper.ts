@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { processorFetch } from "@/lib/processor";
 import { getObjectBytes } from "@/lib/storage";
 
 /** JSON contract returned by services/processor (POST /segment/qp). Coordinates: PDF pt, top-left. */
@@ -26,17 +27,11 @@ export type SegmentResult = {
   warnings: string[];
 };
 
-const processorUrl = () => process.env.PROCESSOR_URL ?? "http://localhost:8000";
-
 export async function callProcessor(parserKey: string, pdf: Uint8Array): Promise<SegmentResult> {
   const form = new FormData();
   form.append("parser_key", parserKey);
   form.append("file", new Blob([pdf as BlobPart], { type: "application/pdf" }), "paper.pdf");
-  const res = await fetch(`${processorUrl()}/segment/qp`, {
-    method: "POST",
-    body: form,
-    signal: AbortSignal.timeout(120_000),
-  });
+  const res = await processorFetch("/segment/qp", { method: "POST", body: form });
   if (!res.ok) throw new Error(`Processor responded ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json();
 }

@@ -5,7 +5,7 @@ import { apiUser } from "@/lib/api-auth";
 import { getBuiltPaper } from "@/lib/builder/server";
 import { buildPaperPdf } from "@/lib/export/build-pdf";
 import { buildPaperDocx } from "@/lib/export/build-docx";
-import { getObjectBytes } from "@/lib/storage";
+import { getObjectBytes, putFile, signedDownloadUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -36,28 +36,30 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const loadSource = (paperId: string) => getObjectBytes(keyOf.get(paperId)!);
   const filename = (bp.header.title || bp.title).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "paper";
 
+  // The file is saved privately in storage and downloaded through a link that expires in a few
+  // minutes: exports can be bigger than a hosting response allows (~4.5 MB on Vercel).
+  // One object per paper and format, overwritten on each export.
+  const deliver = async (bytes: Uint8Array, name: string, contentType: string, kind: string) => {
+    const key = `exports/${bp.id}/${kind}`;
+    await putFile(key, bytes, contentType);
+    return NextResponse.json({ url: await signedDownloadUrl(key, name, contentType), filename: name, bytes: bytes.length });
+  };
+
   if (format === "docx") {
     const mode = url.searchParams.get("mode") === "editable" ? "editable" : "pictures";
     try {
       const docx = await buildPaperDocx({ title: bp.title, header: bp.header, items, bank, mode, loadSource });
-      return new Response(new Uint8Array(docx), {
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "Content-Disposition": `attachment; filename="${filename}${mode === "editable" ? "_editable" : ""}.docx"`,
-          "Cache-Control": "private, no-store",
-        },
-      });
+      return deliver(
+        docx,
+        `${filename}${mode === "editable" ? "_editable" : ""}.docx`,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        `${mode}.docx`,
+      );
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 502 });
     }
   }
 
   const pdf = await buildPaperPdf({ title: bp.title, header: bp.header, items, bank, loadSource });
-  return new Response(new Uint8Array(pdf), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}.pdf"`,
-      "Cache-Control": "private, no-store",
-    },
-  });
+  return deliver(pdf, `${filename}.pdf`, "application/pdf", "paper.pdf");
 }

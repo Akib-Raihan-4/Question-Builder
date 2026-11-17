@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { deleteObject, paperFileKey, putPdf } from "@/lib/storage";
-import { enqueueSegmentPaper } from "@/lib/jobs/queue";
+import { scheduleSegmentPaper } from "@/lib/jobs/run";
 import { SERIES, type Series } from "@/lib/paper-filename";
 
 export const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -24,11 +24,11 @@ export const PAPER_CODE_RE = /^[0-9A-Z][0-9A-Z/ -]{1,23}$/;
 
 export type CreateResult =
   | { ok: true; paperId: string; status: "processing" }
-  | { ok: false; error: string; code: "invalid" | "duplicate" | "storage" | "queue" };
+  | { ok: false; error: string; code: "invalid" | "duplicate" | "storage" };
 
 const isPdf = (b: Uint8Array) => b.length > 4 && String.fromCharCode(...b.slice(0, 4)) === "%PDF";
 
-/** Validate → papers row → storage → queue. Shared by single and ZIP upload. */
+/** Validate → papers row → storage → find questions (after the response). */
 export async function createPaper(input: NewPaperInput): Promise<CreateResult> {
   const paperCode = input.paperCode.trim().toUpperCase();
   if (!isPdf(input.bytes)) return { ok: false, code: "invalid", error: "Not a PDF file" };
@@ -76,16 +76,8 @@ export async function createPaper(input: NewPaperInput): Promise<CreateResult> {
     return { ok: false, code: "storage", error: `Storage upload failed: ${(err as Error).message}` };
   }
 
-  try {
-    await enqueueSegmentPaper(id);
-    await db.update(schema.papers).set({ status: "processing", updatedAt: new Date() }).where(eq(schema.papers.id, id));
-  } catch (err) {
-    await db
-      .update(schema.papers)
-      .set({ statusReason: `Could not queue processing: ${(err as Error).message}` })
-      .where(eq(schema.papers.id, id));
-    return { ok: false, code: "queue", error: "Saved, but could not queue processing. Use Re-run." };
-  }
+  await db.update(schema.papers).set({ status: "processing", updatedAt: new Date() }).where(eq(schema.papers.id, id));
+  scheduleSegmentPaper(id);
   return { ok: true, paperId: id, status: "processing" };
 }
 

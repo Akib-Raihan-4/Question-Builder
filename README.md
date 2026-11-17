@@ -11,7 +11,7 @@ See [PLAN.md](PLAN.md) for the full design and build phases.
 
 | Path | What |
 |---|---|
-| `apps/web` | Next.js 15 app (UI, API routes, auth, job worker) |
+| `apps/web` | Next.js 15 app (UI, API routes, auth) |
 | `services/processor` | FastAPI + PyMuPDF paper segmentation |
 | `samples/` | Real past papers for development (gitignored) |
 
@@ -37,20 +37,22 @@ npm run db:migrate        # apply Drizzle migrations
 npm run db:seed           # Edexcel subjects + spec topics
 npm run user:create -- admin@school.org 'a-strong-password' admin "Admin Name"
 npm run processor         # PDF processor on :8000 (separate terminal)
-npm run dev               # http://localhost:3000 — also runs the pg-boss job worker
+npm run dev               # http://localhost:3000
 ```
 
-> The job worker is loaded once when `npm run dev` starts; after changing code under
-> `src/lib/jobs/`, restart the dev server. To build while dev is running:
-> `NEXT_DIST_DIR=.next-build npx next build` (in `apps/web`).
+Hosting (Vercel + Render): see [DEPLOY.md](DEPLOY.md). All settings are listed in `.env.example`.
+
+> Questions are found right after each upload/re-run responds (Next.js `after()`; no separate
+> worker). To build while dev is running: `NEXT_DIST_DIR=.next-build npx next build` (in `apps/web`).
 
 Upload papers at **Past papers** (admin), which has one tab per subject/level (e.g. Mathematics B ·
 International GCSE, Physics Unit 3 · International A Level); **+ Add subject** adds more (A-level units
 are their own subjects, e.g. WPH13). Choosing a PDF reads its paper code, series and year from the
 cover page. Untick *Find questions automatically* for layouts the parser doesn't know (or scans):
 then add each question in Review and draw its box. *Edit details* on a paper fixes its subject/code.
-Upload a ZIP or single PDFs. Each upload is stored privately, queued,
-and sent to the processor; the paper then shows **Needs review**. PDFs are only ever served through
+Upload a ZIP (unzipped in the browser, then uploaded one PDF at a time) or single PDFs (up to
+4.4 MB each). Each upload is stored privately and sent to the processor; the paper then shows
+**Needs review**. PDFs are only ever served through
 `/api/papers/:id/file` to logged-in users (teachers only see published papers).
 
 **Review** a paper to check every box on the page: drag to move, drag handles to resize,
@@ -88,7 +90,7 @@ cd services/processor && python3 -m venv .venv && .venv/bin/pip install -r requi
 .venv/bin/python -m pytest
 ```
 
-Or everything with Docker: `docker compose up` (web, processor, MinIO).
+Or both parts with Docker: `docker compose up` (web + processor; storage and database from `.env.local`).
 
 ## Tests
 

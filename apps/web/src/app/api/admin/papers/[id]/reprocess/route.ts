@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
-import { enqueueSegmentPaper } from "@/lib/jobs/queue";
+import { scheduleSegmentPaper } from "@/lib/jobs/run";
+
+export const maxDuration = 300;
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Box, marks and label fixes survive a re-run (edited_by_admin). Split/merge and added/removed
@@ -21,10 +23,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     );
   }
-  await enqueueSegmentPaper(id);
   await db
     .update(schema.papers)
     .set({ status: "processing", statusReason: null, updatedAt: new Date() })
     .where(eq(schema.papers.id, id));
+  scheduleSegmentPaper(id);
   return NextResponse.json({ ok: true });
 }

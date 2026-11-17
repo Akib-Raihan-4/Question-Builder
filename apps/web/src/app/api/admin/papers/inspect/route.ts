@@ -4,6 +4,8 @@ import { apiUser } from "@/lib/api-auth";
 import { matchSubject, readCover } from "@/lib/papers/inspect";
 
 export const runtime = "nodejs";
+// A hosted processor on a free plan may need ~30-60 s to wake up.
+export const maxDuration = 90;
 
 /** Read a PDF's cover page to pre-fill the upload form. Nothing is stored. */
 export async function POST(req: Request) {

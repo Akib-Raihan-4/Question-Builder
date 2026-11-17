@@ -49,17 +49,17 @@ exposed publicly.
 | Web app | Next.js 15 (App Router), TypeScript, Tailwind, shadcn/ui |
 | Database | PostgreSQL (Neon) + Drizzle ORM |
 | PDF analysis | Python 3.12, FastAPI, PyMuPDF, pdfplumber |
-| Jobs | pg-boss (Postgres-backed queue) |
-| File storage | S3-compatible (MinIO locally) — original PDFs only |
+| Jobs | Next.js `after()` right after each upload/re-run (no worker; fits serverless hosting) |
+| File storage | S3-compatible, private (Backblaze B2) — original PDFs and exports |
 | PDF viewing | pdfjs-dist |
 | PDF export | pdf-lib |
 | Builder state | Zustand + dnd-kit |
 | Auth | BetterAuth (email + password), roles: admin, teacher |
 | Topic tagging | Claude API (suggest only, admin confirms) |
-| Dev/deploy | Docker Compose: web, processor, minio (+ optional postgres) |
+| Dev/deploy | Local: two commands. Hosted: Vercel (web) + Render (processor), see DEPLOY.md |
 
 ```
-apps/web/                 Next.js app (UI + API routes + job worker)
+apps/web/                 Next.js app (UI + API routes)
   src/db/schema.ts        Drizzle schema
   src/lib/coords.ts       coordinate conversions (one place only)
   src/lib/export/         pdf-lib paper + mark scheme assembly
