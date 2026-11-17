@@ -10,6 +10,9 @@ export async function apiUser(required?: Role): Promise<Ok | Fail> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   const role = ((session.user as { role?: Role }).role ?? "teacher") as Role;
+  if ((session.user as { status?: string }).status !== "active") {
+    return { ok: false, response: NextResponse.json({ error: "Your account is waiting for approval" }, { status: 403 }) };
+  }
   if (required === "admin" && role !== "admin") {
     return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }

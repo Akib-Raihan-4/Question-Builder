@@ -8,6 +8,8 @@ export async function requireUser(role?: Role) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
   const userRole = (session.user as { role?: Role }).role ?? "teacher";
+  // Defence in depth: a pending account never gets past this, even with a session.
+  if ((session.user as { status?: string }).status !== "active") redirect("/login?pending=1");
   if (role === "admin" && userRole !== "admin") redirect("/");
   return { ...session, role: userRole };
 }

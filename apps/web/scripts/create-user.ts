@@ -15,8 +15,11 @@ async function main() {
 
   const existing = await ctx.internalAdapter.findUserByEmail(email.toLowerCase());
   if (existing) {
-    await db.update(schema.user).set({ role: role as "admin" | "teacher" }).where(eq(schema.user.id, existing.user.id));
-    console.log(`User ${email} already exists — role set to ${role}.`);
+    await db
+      .update(schema.user)
+      .set({ role: role as "admin" | "teacher", status: "active", approvedAt: new Date() })
+      .where(eq(schema.user.id, existing.user.id));
+    console.log(`User ${email} already exists — role set to ${role}, account active.`);
     process.exit(0);
   }
 
@@ -30,7 +33,11 @@ async function main() {
     accountId: user.id,
     password: await ctx.password.hash(password),
   });
-  await db.update(schema.user).set({ role: role as "admin" | "teacher" }).where(eq(schema.user.id, user.id));
+  // Created from the command line by someone with server access: active straight away.
+  await db
+    .update(schema.user)
+    .set({ role: role as "admin" | "teacher", status: "active", approvedAt: new Date() })
+    .where(eq(schema.user.id, user.id));
   console.log(`✓ Created ${role} ${email}`);
   process.exit(0);
 }

@@ -75,7 +75,10 @@ LibreOffice and Pages open them; use Word's *Save As* if a legacy .doc is requir
 *My papers* shows each paper's questions and marks, with Duplicate and Delete. Admins see
 **Usage**: papers built, questions picked and the most-used questions.
 
-Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
+Teachers can **Create an account** from the sign-in page. New accounts are *pending* and can't sign
+in until an admin approves them on **Teachers** (a badge shows how many are waiting); *Reject*
+deletes the account. Admins can also remove accounts there. `npm run user:create -- <email>
+<password> <admin|teacher> "<Name>"` still creates an account that is active straight away.
 
 Processor (Python 3.12+):
 

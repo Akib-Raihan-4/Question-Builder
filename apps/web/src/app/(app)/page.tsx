@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const { user, role } = await requireUser();
-  const [subjects, recent, review] = await Promise.all([
+  const [subjects, recent, review, accounts] = await Promise.all([
     db
       .select({
         id: schema.subjects.id,
@@ -34,6 +34,9 @@ export default async function Home() {
     role === "admin"
       ? db.select({ n: sql<number>`count(*)::int` }).from(schema.papers).where(eq(schema.papers.status, "needs_review"))
       : Promise.resolve([{ n: 0 }]),
+    role === "admin"
+      ? db.select({ n: sql<number>`count(*)::int` }).from(schema.user).where(eq(schema.user.status, "pending"))
+      : Promise.resolve([{ n: 0 }]),
   ]);
 
   return (
@@ -48,6 +51,11 @@ export default async function Home() {
         <NewPaperButton />
       </div>
 
+      {role === "admin" && accounts[0].n > 0 && (
+        <Link href="/admin/teachers" className="block rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100">
+          {accounts[0].n} teacher account{accounts[0].n === 1 ? " is" : "s are"} waiting for your approval →
+        </Link>
+      )}
       {role === "admin" && review[0].n > 0 && (
         <Link href="/admin" className="block rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100">
           {review[0].n} past paper{review[0].n === 1 ? " needs" : "s need"} review before teachers can use {review[0].n === 1 ? "it" : "them"} →

@@ -18,6 +18,8 @@ import {
 /* ------------------------------------------------------------------ */
 
 export const userRole = pgEnum("user_role", ["admin", "teacher"]);
+/** New sign-ups wait as "pending" until an admin approves them (rejecting deletes the account). */
+export const accountStatus = pgEnum("account_status", ["pending", "active"]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -26,6 +28,9 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   role: userRole("role").notNull().default("teacher"),
+  status: accountStatus("status").notNull().default("pending"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
