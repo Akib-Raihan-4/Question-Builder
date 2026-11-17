@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Literal
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 from pydantic import BaseModel, Field
 
 
@@ -69,7 +69,11 @@ class BaseParser(ABC):
                 **base, status="failed",
                 reason=f"No text layer on pages {scanned[:10]}… — scanned PDFs are not supported in v1.",
             )
-        return SegmentResult(**base, questions=self.find_questions(doc))
+        questions = self.find_questions(doc)
+        return SegmentResult(**base, questions=questions, warnings=self.paper_warnings(questions))
+
+    def paper_warnings(self, questions: list[Question]) -> list[str]:
+        return []
 
     @abstractmethod
     def find_questions(self, doc: fitz.Document) -> list[Question]:

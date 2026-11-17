@@ -62,3 +62,8 @@ Or everything with Docker: `docker compose up` (web, processor, MinIO).
 npm test                                   # Vitest (coords, builder store)
 cd services/processor && .venv/bin/python -m pytest
 ```
+
+Golden tests compare the parser against expected JSON in `services/processor/tests/fixtures/golden/`
+(numbers, marks, parts, regions — no paper text). They read the real PDFs from `/samples` and skip if
+it's empty. After an intentional parser change, regenerate with
+`cd services/processor && .venv/bin/python tests/golden.py --update` and review the diff.
