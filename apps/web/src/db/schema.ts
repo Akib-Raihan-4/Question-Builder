@@ -127,6 +127,8 @@ export const papers = pgTable(
     year: integer("year").notNull(),
     tier: text("tier"), // "F" | "H" | null
     fileKey: text("file_key").notNull(),
+    originalFilename: text("original_filename"),
+    fileSize: integer("file_size"),
     pageCount: integer("page_count"),
     pageWidth: real("page_width"),
     pageHeight: real("page_height"),
@@ -141,6 +143,7 @@ export const papers = pgTable(
   (t) => [
     index("papers_subject_idx").on(t.subjectId),
     index("papers_status_idx").on(t.status),
+    uniqueIndex("papers_identity_idx").on(t.subjectId, t.paperCode, t.series, t.year),
   ],
 );
 

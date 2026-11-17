@@ -14,14 +14,17 @@
     "user:create": "tsx --env-file=.env.local scripts/create-user.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1170.0",
     "@base-ui/react": "^1.9.0",
     "better-auth": "^1.7.25",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
     "lucide-react": "^1.74.0",
     "next": "15.5.6",
     "pg": "^8.23.1",
+    "pg-boss": "^12.38.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "server-only": "^0.0.1",

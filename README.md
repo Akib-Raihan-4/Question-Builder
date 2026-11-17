@@ -23,6 +23,12 @@ See [PLAN.md](PLAN.md) for the full design and build phases.
 DATABASE_URL=postgres://...          # Neon
 BETTER_AUTH_SECRET=...               # openssl rand -base64 32
 BETTER_AUTH_URL=http://localhost:3000
+S3_ENDPOINT=https://s3.<region>.backblazeb2.com   # any S3-compatible store; bucket must be PRIVATE
+S3_REGION=<region>
+S3_BUCKET=<bucket>
+S3_ACCESS_KEY_ID=<bucket-scoped key id>
+S3_SECRET_ACCESS_KEY=<key>
+PROCESSOR_URL=http://localhost:8000              # optional, this is the default
 ```
 
 ```bash
@@ -30,8 +36,13 @@ npm install
 npm run db:migrate        # apply Drizzle migrations
 npm run db:seed           # Edexcel subjects + spec topics
 npm run user:create -- admin@school.org 'a-strong-password' admin "Admin Name"
-npm run dev               # http://localhost:3000
+npm run processor         # PDF processor on :8000 (separate terminal)
+npm run dev               # http://localhost:3000 — also runs the pg-boss job worker
 ```
+
+Upload papers at **Past papers** (admin): a ZIP or single PDFs. Each upload is stored privately, queued,
+and sent to the processor; the paper then shows **Needs review**. PDFs are only ever served through
+`/api/papers/:id/file` to logged-in users (teachers only see published papers).
 
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 
