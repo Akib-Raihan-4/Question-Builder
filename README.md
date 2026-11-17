@@ -54,6 +54,11 @@ remove parts, split/merge questions and pick topics in the side panel. Hand-edit
 labels are kept when the parser re-runs. **Publish** is enabled once every question's part marks add
 up to its total and every question and part has a box.
 
+**Builder** (teachers): *My papers* → *New paper*. Pick a published past paper on the left; click a
+part to add it, or the **+** tab in the number column to add the whole question (click again to
+remove). The right side is a live preview: questions are numbered in pick order, totals use the
+board's "(Total for Question N is M marks)" line, drag ⠿ to reorder, and the paper auto-saves.
+
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 
 Processor (Python 3.12+):

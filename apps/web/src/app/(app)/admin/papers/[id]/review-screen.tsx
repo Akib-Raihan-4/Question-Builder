@@ -164,7 +164,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const published = data.paper.status === "published";
 
   return (
-    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className="-my-8 ml-[calc(50%-50vw)] flex h-[calc(100vh-3.5rem)] w-screen flex-col">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5">
         <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">← Past papers</Link>

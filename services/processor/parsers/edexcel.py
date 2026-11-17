@@ -15,7 +15,7 @@ Measured layout:
   question end      bold "(Total for Question N is M marks)", right-aligned at x1 = 510.2
   footer            page number / barcode / "Turn over" at y >= 793
   margin strips     "DO NOT WRITE IN THIS AREA" images/vertical text at x >= 567 or x <= 28
-  content band      y 50-790; answer lines reach x = 552.8
+  content band      y 50-790; answer lines reach x = 552.8; page frame at x = 560.3
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class EdexcelConfig:
     number_x0_max: float = 47.0
     # Crop horizontally from just right of the number column to just left of the margin strip
     crop_x0: float = 59.0
-    crop_x1: float = 562.0
+    crop_x1: float = 557.5  # the page frame's right edge is at 560.3
     # Vertical content band (excludes header strip and footer: page number, barcode, Turn over)
     content_top: float = 50.0
     content_bottom: float = 790.0
@@ -80,7 +80,7 @@ class _Label:
 
 class EdexcelParser(BaseParser):
     key = "edexcel"
-    version = "1.0.1"
+    version = "1.0.2"
 
     def __init__(self, config: EdexcelConfig | None = None):
         self.c = config or EdexcelConfig()
@@ -301,7 +301,12 @@ class EdexcelParser(BaseParser):
             part_floor = start_pos
             for j, lf in enumerate(leaves):
                 pf = part_floor[1] if part_floor[0] == lf.page else c.content_top
-                part_start = (lf.page, self._top(lf.page, pf, lf.y0))
+                if j == 0:
+                    part_start = (lf.page, self._top(lf.page, pf, lf.y0))
+                else:
+                    # Text between the previous part's marks and this label (e.g. new information
+                    # for part (b)) belongs to this part.
+                    part_start = (lf.page, pf)
                 part_end = lf.end
                 if part_end is None:
                     following = leaves[j + 1] if j + 1 < len(leaves) else None

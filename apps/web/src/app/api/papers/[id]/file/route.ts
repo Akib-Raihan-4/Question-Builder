@@ -21,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       "Content-Type": "application/pdf",
       ...(length ? { "Content-Length": String(length) } : {}),
       "Content-Disposition": `inline; filename="${paper.paperCode.replace("/", "-")}_${paper.series}_${paper.year}.pdf"`,
-      "Cache-Control": "private, no-store",
+      "Cache-Control": "private, max-age=3600", // this browser only; never shared caches
       "X-Robots-Tag": "noindex",
     },
   });
