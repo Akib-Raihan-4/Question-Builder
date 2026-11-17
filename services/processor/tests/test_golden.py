@@ -34,7 +34,9 @@ def test_phase3_done_when(pdf):
     s = snapshot(pdf)
     nums = [q["number"] for q in s["questions"]]
     assert nums == list(range(1, len(nums) + 1))
-    assert sum(q["total_marks"] for q in s["questions"]) == 100
+    # Question totals must match the paper's own "TOTAL FOR PAPER IS N MARKS" (100 for 4MB1, 50 for WPH13).
+    assert not any("TOTAL FOR PAPER" in w for w in s["warnings"]), s["warnings"]
+    assert s["questions"]
     for q in s["questions"]:
         assert not any("No '(Total" in w for w in q["warnings"]), f"Q{q['number']} missing Total line"
         if q["parts"]:

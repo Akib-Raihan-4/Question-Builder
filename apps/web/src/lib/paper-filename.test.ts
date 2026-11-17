@@ -28,6 +28,13 @@ describe("parsePaperFilename", () => {
     }
   });
 
+  it("parses Pearson's own file names, including October series", () => {
+    expect(parsePaperFilename("WPH13_01_que_20240123.pdf")).toEqual({
+      specCode: "WPH13", paperCode: "WPH13/01", series: "January", year: 2024, tier: null,
+    });
+    expect(parsePaperFilename("WPH13_01_que_20231011.pdf")?.series).toBe("October");
+  });
+
   it("ignores folders inside a zip", () => {
     expect(parsePaperFilename("maths/b/IGCSE_MATHEMATICS_B_2021_Nov_P1_QP.pdf")?.year).toBe(2021);
   });

@@ -15,7 +15,12 @@ export type NewPaperInput = {
   bytes: Uint8Array;
   filename: string;
   uploadedBy: string;
+  /** false = no automatic detection; the admin marks questions by hand. */
+  autoDetect?: boolean;
 };
+
+/** Any board's code: "4MB1/01", "4MA1/1H", "WPH13/01", "9PH0/03"... letters, digits, / and -. */
+export const PAPER_CODE_RE = /^[0-9A-Z][0-9A-Z/ -]{1,23}$/;
 
 export type CreateResult =
   | { ok: true; paperId: string; status: "processing" }
@@ -32,15 +37,12 @@ export async function createPaper(input: NewPaperInput): Promise<CreateResult> {
   if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 2100) {
     return { ok: false, code: "invalid", error: "Year looks wrong" };
   }
-  if (!/^[0-9A-Z]{4}\/[0-9A-Z]{1,4}$/.test(paperCode)) {
-    return { ok: false, code: "invalid", error: 'Paper code should look like "4MA1/1H" or "4MB1/01"' };
+  if (!PAPER_CODE_RE.test(paperCode)) {
+    return { ok: false, code: "invalid", error: 'Paper code should be letters and numbers, e.g. "4MB1/01" or "WPH13/01"' };
   }
 
   const [subject] = await db.select().from(schema.subjects).where(eq(schema.subjects.id, input.subjectId));
   if (!subject) return { ok: false, code: "invalid", error: "Unknown subject" };
-  if (!paperCode.startsWith(`${subject.specCode}/`)) {
-    return { ok: false, code: "invalid", error: `Paper code must start with ${subject.specCode}/` };
-  }
 
   const id = crypto.randomUUID();
   const fileKey = paperFileKey(id);
@@ -55,7 +57,8 @@ export async function createPaper(input: NewPaperInput): Promise<CreateResult> {
       fileKey,
       originalFilename: input.filename,
       fileSize: input.bytes.length,
-      parserKey: subject.board, // the board picks the parser
+      // The board picks the parser, unless the admin chose to mark questions by hand.
+      parserKey: input.autoDetect === false ? "manual" : subject.board,
       status: "uploaded",
       uploadedBy: input.uploadedBy,
     });

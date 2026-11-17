@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
@@ -34,5 +34,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
   }
   await touchPaper(paperId);
+  return NextResponse.json({ ok: true });
+}
+
+/** Remove a question (and its parts and boxes) — unless a teacher's paper uses it. */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const u = await apiUser("admin");
+  if (!u.ok) return u.response;
+  const id = (await params).id;
+  const paperId = await paperOfQuestion(id);
+  if (!paperId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const [used] = await db
+    .select({ id: schema.builtPaperItems.id })
+    .from(schema.builtPaperItems)
+    .where(eq(schema.builtPaperItems.questionId, id))
+    .limit(1);
+  if (used) return NextResponse.json({ error: "A teacher's paper uses this question, so it can't be deleted." }, { status: 409 });
+  const parts = await db.select({ id: schema.questionParts.id }).from(schema.questionParts).where(eq(schema.questionParts.questionId, id));
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.regions).where(inArray(schema.regions.ownerId, [id, ...parts.map((p) => p.id)]));
+    await tx.delete(schema.questions).where(eq(schema.questions.id, id));
+  });
+  await touchPaper(paperId, { structure: true });
   return NextResponse.json({ ok: true });
 }

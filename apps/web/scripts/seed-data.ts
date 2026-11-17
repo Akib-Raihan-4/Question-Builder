@@ -80,6 +80,14 @@ export const SUBJECTS: SubjectSeed[] = [
     ],
   },
   {
+    // International A Level units are separate subjects: each unit is its own exam (WPH13/01 etc.).
+    board: "edexcel",
+    qualification: "International A Level",
+    name: "Physics Unit 3",
+    specCode: "WPH13",
+    topics: [],
+  },
+  {
     board: "edexcel",
     qualification: "International GCSE",
     name: "Chemistry",

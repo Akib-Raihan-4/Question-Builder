@@ -3,6 +3,8 @@
 > Source: "Question Paper Builder — Build Plan for Claude Code" (Akib Raihan, 17 Nov 2026).
 > **Current focus: Pearson Edexcel International GCSE first** (4MA1, 4PH1, 4CH1, 4BI1). Cambridge IGCSE is
 > a second parser behind the same interface, added later.
+> **Also supported:** Edexcel International A Level units (first: Physics Unit 3, WPH13), any other
+> paper by marking questions by hand, subjects added by admins, and paper details read from the cover.
 > **Deviation:** the database is hosted Neon Postgres (`DATABASE_URL` in `.env.local`); the Compose
 > `postgres` service is optional (`--profile localdb`).
 
@@ -158,7 +160,9 @@ only if too wide, never up. Never split a region. Footer: page numbers + "Total 
 Implemented refinements: a region that misses fitting by a little is shrunk (≥ 85%) rather than
 leaving a near-empty page, and a short region (e.g. a question's opening lines before a chosen
 part) is kept on the same page as the next region.
-Later: DOCX export, answer-space control, shuffled versions.
+DOCX export (added): "exact look" (crops as 200-dpi pictures, editable numbers/totals/header) and
+"editable text" (lines rebuilt as Word paragraphs, drawn bands as pictures), built in the processor.
+Later: answer-space control, shuffled versions.
 
 ## Build phases
 

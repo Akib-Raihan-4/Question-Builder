@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { unzipSync } from "fflate";
-import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
 import { createPaper } from "@/lib/papers/create";
-import { parsePaperFilename } from "@/lib/paper-filename";
+import { parsePaperFilename, SERIES, type Series } from "@/lib/paper-filename";
+import { matchSubject, readCover } from "@/lib/papers/inspect";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -28,23 +28,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Could not read the ZIP file" }, { status: 400 });
   }
 
-  const subjects = await db.select().from(schema.subjects).where(eq(schema.subjects.board, "edexcel"));
-  const bySpec = new Map(subjects.map((s) => [s.specCode, s]));
+  const subjects = await db.select().from(schema.subjects);
+  const autoDetect = form.get("autoDetect") !== "false";
   const results: Row[] = [];
 
   for (const [path, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeCompare(b))) {
     const name = path.split("/").pop()!;
-    const meta = parsePaperFilename(name);
+    // File name first; otherwise read the cover page (paper code, series, year).
+    let meta = parsePaperFilename(name);
     if (!meta) {
-      results.push({ file: name, ok: false, message: "Skipped: file name not recognised as a question paper" });
+      const c = await readCover(bytes);
+      if (c?.paper_code && c.series && c.year && SERIES.includes(c.series as Series)) {
+        meta = { specCode: "", paperCode: c.paper_code, series: c.series as Series, year: c.year, tier: c.tier };
+      }
+    }
+    if (!meta) {
+      results.push({ file: name, ok: false, message: "Skipped: couldn't tell the paper code/series/year from the name or cover — upload it on its own" });
       continue;
     }
-    const subject = bySpec.get(meta.specCode);
+    const subject = matchSubject(meta.paperCode, subjects);
     if (!subject) {
-      results.push({ file: name, ok: false, message: `Skipped: subject ${meta.specCode} is not set up` });
+      results.push({ file: name, ok: false, message: `Skipped: no subject for ${meta.paperCode} — add the subject first` });
       continue;
     }
-    const r = await createPaper({ ...meta, subjectId: subject.id, bytes, filename: name, uploadedBy: u.userId });
+    const r = await createPaper({ ...meta, subjectId: subject.id, bytes, filename: name, uploadedBy: u.userId, autoDetect });
     results.push(
       r.ok
         ? { file: name, ok: true, paperId: r.paperId, message: `${meta.paperCode} ${meta.series} ${meta.year}` }

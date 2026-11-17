@@ -18,6 +18,8 @@ export function PaperPane({ saveState }: { saveState: string }) {
   const title = useBuilder((s) => s.title);
   const { setTitle, setHeader, move } = useBuilder.getState();
   const [showHeader, setShowHeader] = useState(false);
+  const [view, setView] = useState<"preview" | "outline">("preview");
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [sheetWidth, setSheetWidth] = useState(520);
   const total = totalMarks(items, bank);
@@ -35,6 +37,13 @@ export function PaperPane({ saveState }: { saveState: string }) {
     return () => ro.disconnect();
   }, []);
   const scale = sheetWidth / A4_W; // crops keep their size relative to the A4 page
+
+  useEffect(() => {
+    if (view !== "preview" || !jumpTo) return;
+    const t = setTimeout(() => document.getElementById(`item-${jumpTo}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    setJumpTo(null);
+    return () => clearTimeout(t);
+  }, [view, jumpTo]);
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over || e.active.id === e.over.id) return;
@@ -77,6 +86,18 @@ export function PaperPane({ saveState }: { saveState: string }) {
               className="h-7 w-12 rounded-md border px-1.5 text-right"
             />
           </label>
+          <div className="inline-flex rounded-md bg-muted p-0.5 text-xs">
+            {(["preview", "outline"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={cn("rounded px-2 py-0.5", view === v ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+                title={v === "outline" ? "One line per question — easiest way to reorder long questions" : "See the paper as it will print"}
+              >
+                {v === "preview" ? "Preview" : "Outline"}
+              </button>
+            ))}
+          </div>
           <button onClick={() => setShowHeader((s) => !s)} className="rounded-md border px-2 py-1 text-xs hover:bg-muted">
             {showHeader ? "Hide header" : "Edit header"}
           </button>
@@ -111,7 +132,34 @@ export function PaperPane({ saveState }: { saveState: string }) {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-100 p-4">
+      {view === "outline" && (
+        <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-100 p-4">
+          {items.length === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">Your paper is empty.</p>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <SortableContext items={items.map((i) => i.questionId)} strategy={verticalListSortingStrategy}>
+                <ol className="mx-auto max-w-[620px] space-y-1.5">
+                  {items.map((item, index) => (
+                    <OutlineRow
+                      key={item.questionId}
+                      item={item}
+                      index={index}
+                      count={items.length}
+                      onOpen={() => {
+                        setJumpTo(item.questionId);
+                        setView("preview");
+                      }}
+                    />
+                  ))}
+                </ol>
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
+      )}
+
+      <div className={cn("min-h-0 flex-1 overflow-y-auto bg-zinc-100 p-4", view !== "preview" && "hidden")}>
         <div ref={sheetRef} className="mx-auto w-full max-w-[620px] bg-white px-0 pb-8 shadow-sm ring-1 ring-black/5">
           <div className="border-b px-6 pb-4 pt-6 text-center">
             {header.school && <div className="text-sm font-semibold uppercase tracking-wide">{header.school}</div>}
@@ -132,7 +180,7 @@ export function PaperPane({ saveState }: { saveState: string }) {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
               <SortableContext items={items.map((i) => i.questionId)} strategy={verticalListSortingStrategy}>
                 {items.map((item, index) => (
-                  <PreviewItem key={item.questionId} item={item} index={index} scale={scale} />
+                  <PreviewItem key={item.questionId} item={item} index={index} count={items.length} scale={scale} />
                 ))}
               </SortableContext>
             </DndContext>
@@ -146,7 +194,7 @@ export function PaperPane({ saveState }: { saveState: string }) {
   );
 }
 
-function PreviewItem({ item, index, scale }: { item: Item; index: number; scale: number }) {
+function PreviewItem({ item, index, count, scale }: { item: Item; index: number; count: number; scale: number }) {
   const bank = useBuilder((s) => s.bank);
   const { removeItem } = useBuilder.getState();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.questionId });
@@ -162,14 +210,16 @@ function PreviewItem({ item, index, scale }: { item: Item; index: number; scale:
   return (
     <div
       ref={setNodeRef}
+      id={`item-${item.questionId}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group relative border-b border-dashed border-zinc-200 pb-3 pt-4", isDragging && "z-10 bg-white shadow-lg")}
+      className={cn("group relative scroll-mt-2 border-b border-dashed border-zinc-200 pb-3 pt-4", isDragging && "z-10 bg-white shadow-lg")}
     >
       <div className="absolute right-2 top-1 flex items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
         <span className="text-[11px] text-muted-foreground">
           {q.paperLabel} · Q{q.number}
           {parts.length ? parts.map((p) => `(${p.label})`).join("") : ""}
         </span>
+        <MoveControls index={index} count={count} />
         <button
           {...attributes}
           {...listeners}
@@ -205,5 +255,74 @@ function PreviewItem({ item, index, scale }: { item: Item; index: number; scale:
         (Total for Question {number} is {marks} mark{marks === 1 ? "" : "s"})
       </div>
     </div>
+  );
+}
+
+/** ↑ / ↓ and "move to position" — reordering without dragging (long questions span pages). */
+function MoveControls({ index, count }: { index: number; count: number }) {
+  const { move } = useBuilder.getState();
+  const btn = "rounded px-1 text-sm text-zinc-500 hover:bg-zinc-100 disabled:opacity-30";
+  return (
+    <>
+      <button className={btn} disabled={index === 0} onClick={() => move(index, index - 1)} aria-label={`Move question ${index + 1} up`} title="Move up">
+        ↑
+      </button>
+      <button className={btn} disabled={index === count - 1} onClick={() => move(index, index + 1)} aria-label={`Move question ${index + 1} down`} title="Move down">
+        ↓
+      </button>
+      <select
+        aria-label={`Move question ${index + 1} to position`}
+        title="Move to position"
+        value={index}
+        onChange={(e) => move(index, Number(e.target.value))}
+        className="h-6 rounded border border-zinc-200 bg-white px-0.5 text-[11px] text-zinc-600"
+      >
+        {Array.from({ length: count }, (_, i) => (
+          <option key={i} value={i}>
+            {i === index ? `#${i + 1}` : `→ ${i + 1}`}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+/** Outline row: one line per question, so even 3-page questions are easy to reorder. */
+function OutlineRow({ item, index, count, onOpen }: { item: Item; index: number; count: number; onOpen: () => void }) {
+  const bank = useBuilder((s) => s.bank);
+  const { removeItem } = useBuilder.getState();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.questionId });
+  const q = bank[item.questionId];
+  if (!q) return null;
+  const parts = chosenParts(item, bank);
+  const marks = itemMarks(item, bank);
+  const pages = new Set(itemRegions(item, bank).map((r) => r.page)).size;
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("flex items-center gap-2 rounded-lg border bg-white px-2 py-1.5 text-sm", isDragging && "z-10 shadow-lg")}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab rounded px-1 text-zinc-400 hover:bg-zinc-100 active:cursor-grabbing"
+        aria-label={`Drag question ${index + 1}`}
+        title="Drag to reorder"
+      >
+        ⠿
+      </button>
+      <span className="w-6 text-right font-bold tabular-nums">{index + 1}</span>
+      <button onClick={onOpen} className="min-w-0 flex-1 truncate text-left hover:underline" title="Show in preview">
+        {q.paperLabel} · Q{q.number}
+        {parts.map((p) => `(${p.label})`).join("")}
+        <span className="text-xs text-muted-foreground"> · {pages} page{pages === 1 ? "" : "s"}</span>
+      </button>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{marks} mark{marks === 1 ? "" : "s"}</span>
+      <MoveControls index={index} count={count} />
+      <button onClick={() => removeItem(item.questionId)} className="rounded px-1 text-zinc-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove question ${index + 1}`}>
+        ✕
+      </button>
+    </li>
   );
 }

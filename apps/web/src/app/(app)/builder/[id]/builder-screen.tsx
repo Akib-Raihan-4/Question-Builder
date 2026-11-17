@@ -19,6 +19,25 @@ export function BuilderScreen({ paper, sources }: Props) {
   const savedVersion = useRef(0);
   const saveRef = useRef<(() => Promise<void>) | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [menu, setMenu] = useState(false);
+
+  async function exportAs(query: string) {
+    setExporting(true);
+    try {
+      await saveRef.current?.(); // export what's on screen
+      const res = await fetch(`/api/built-papers/${paper.id}/export?${query}`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Export failed");
+      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "paper";
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
   const itemCount = useBuilder((st) => st.items.length);
 
   // Load this paper into the store once.
@@ -76,30 +95,39 @@ export function BuilderScreen({ paper, sources }: Props) {
     <div className="-my-8 ml-[calc(50%-50vw)] flex h-[calc(100vh-3.5rem)] w-screen flex-col">
       <div className="flex items-center gap-3 border-b bg-background px-4 py-2 text-sm">
         <Link href="/builder" className="text-muted-foreground hover:text-foreground">← My papers</Link>
-        <button
-          disabled={!itemCount || exporting}
-          onClick={async () => {
-            setExporting(true);
-            try {
-              await saveRef.current?.(); // export what's on screen
-              const res = await fetch(`/api/built-papers/${paper.id}/export`);
-              if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Export failed");
-              const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "paper.pdf";
-              const url = URL.createObjectURL(await res.blob());
-              const a = Object.assign(document.createElement("a"), { href: url, download: name });
-              a.click();
-              setTimeout(() => URL.revokeObjectURL(url), 10_000);
-            } catch (e) {
-              alert((e as Error).message);
-            } finally {
-              setExporting(false);
-            }
-          }}
-          className="ml-auto inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
-          title={itemCount ? "Download this paper as a PDF" : "Add some questions first"}
-        >
-          {exporting ? "Exporting…" : "Export PDF"}
-        </button>
+        <div className="relative ml-auto">
+          <button
+            disabled={!itemCount || exporting}
+            onClick={() => setMenu((m) => !m)}
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+            title={itemCount ? "Download this paper" : "Add some questions first"}
+          >
+            {exporting ? "Exporting…" : "Export ▾"}
+          </button>
+          {menu && (
+            <div className="absolute right-0 z-30 mt-1 w-80 overflow-hidden rounded-lg border bg-background text-sm shadow-lg">
+              {(
+                [
+                  ["format=pdf", "PDF", "Print-ready. Sharp, exactly like the originals."],
+                  ["format=docx&mode=pictures", "Word — exact look", "Questions as pictures. Numbers, marks, header and instructions are editable."],
+                  ["format=docx&mode=editable", "Word — editable text", "Question wording is editable; diagrams and tables stay as pictures. Best for wordy papers (e.g. Physics); maths with fractions may need tidying."],
+                ] as const
+              ).map(([query, label, hint]) => (
+                <button
+                  key={query}
+                  onClick={() => {
+                    setMenu(false);
+                    void exportAs(query);
+                  }}
+                  className="block w-full px-3 py-2 text-left hover:bg-muted"
+                >
+                  <span className="font-medium">{label}</span>
+                  <span className="block text-xs text-muted-foreground">{hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1">
         {ready && <BrowsePane sources={sources} />}

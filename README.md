@@ -44,7 +44,12 @@ npm run dev               # http://localhost:3000 — also runs the pg-boss job 
 > `src/lib/jobs/`, restart the dev server. To build while dev is running:
 > `NEXT_DIST_DIR=.next-build npx next build` (in `apps/web`).
 
-Upload papers at **Past papers** (admin): a ZIP or single PDFs. Each upload is stored privately, queued,
+Upload papers at **Past papers** (admin), which has one tab per subject/level (e.g. Mathematics B ·
+International GCSE, Physics Unit 3 · International A Level); **+ Add subject** adds more (A-level units
+are their own subjects, e.g. WPH13). Choosing a PDF reads its paper code, series and year from the
+cover page. Untick *Find questions automatically* for layouts the parser doesn't know (or scans):
+then add each question in Review and draw its box. *Edit details* on a paper fixes its subject/code.
+Upload a ZIP or single PDFs. Each upload is stored privately, queued,
 and sent to the processor; the paper then shows **Needs review**. PDFs are only ever served through
 `/api/papers/:id/file` to logged-in users (teachers only see published papers).
 
@@ -59,9 +64,14 @@ published papers (text, year, series, marks range; sort by paper, marks or most 
 questions or single parts from the result cards, or **Browse a paper**: pick a published past paper and click a
 part to add it, or the **+** tab in the number column to add the whole question (click again to
 remove). The right side is a live preview: questions are numbered in pick order, totals use the
-board's "(Total for Question N is M marks)" line, drag ⠿ to reorder, and the paper auto-saves. **Export PDF** downloads the paper: A4, 20 mm
+board's "(Total for Question N is M marks)" line, reorder with ↑/↓, "move to position", drag ⠿, or the **Outline** view (one line per question — easiest
+for long multi-page questions); the paper auto-saves. **Export PDF** downloads the paper: A4, 20 mm
 margins, the header block, each question's original content embedded as vector (text stays
 selectable), new numbers and Total lines, page numbers and "TOTAL FOR PAPER IS N MARKS".
+Export also offers **Word — exact look** (questions as pictures; numbers, marks, header editable) and
+**Word — editable text** (question wording editable, diagrams/tables as pictures; best for wordy
+papers such as Physics, maths fractions may need tidying). Word files are .docx (Word, Google Docs,
+LibreOffice and Pages open them; use Word's *Save As* if a legacy .doc is required).
 *My papers* shows each paper's questions and marks, with Duplicate and Delete. Admins see
 **Usage**: papers built, questions picked and the most-used questions.
 

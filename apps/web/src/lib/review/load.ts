@@ -50,6 +50,13 @@ export async function loadReview(paperId: string): Promise<ReviewData | null> {
       structureEdited: paper.structureEdited,
       parserVersion: paper.parserVersion,
       pageCount: paper.pageCount,
+      statusReason: paper.statusReason,
+      subjectId: paper.subjectId,
+      paperCode: paper.paperCode,
+      series: paper.series,
+      year: paper.year,
+      tier: (paper.tier as "F" | "H" | null) ?? null,
+      parserKey: paper.parserKey,
     },
     questions: questions.map((q) => ({
       id: q.id,
@@ -68,5 +75,11 @@ export async function loadReview(paperId: string): Promise<ReviewData | null> {
       x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, sortOrder: r.sortOrder, editedByAdmin: r.editedByAdmin,
     })),
     topics,
+    subjects: (
+      await db
+        .select({ id: schema.subjects.id, name: schema.subjects.name, q: schema.subjects.qualification, code: schema.subjects.specCode })
+        .from(schema.subjects)
+        .orderBy(asc(schema.subjects.qualification), asc(schema.subjects.name))
+    ).map((x) => ({ id: x.id, label: `${x.name} · ${x.q} (${x.code})` })),
   };
 }

@@ -8,7 +8,7 @@ import type { BankQuestion } from "./model";
 export const SearchParams = z.object({
   subjectId: z.string().uuid().optional(),
   paperId: z.string().uuid().optional(),
-  series: z.enum(["January", "June", "November"]).optional(),
+  series: z.enum(["January", "June", "October", "November"]).optional(),
   yearFrom: z.coerce.number().int().min(2000).max(2100).optional(),
   yearTo: z.coerce.number().int().min(2000).max(2100).optional(),
   minMarks: z.coerce.number().int().min(0).max(100).optional(),

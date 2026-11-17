@@ -30,7 +30,7 @@ const STATUS: Record<PaperRow["status"], { label: string; cls: string }> = {
   failed: { label: "Failed", cls: "bg-red-100 text-red-800" },
 };
 
-export function PapersTable({ rows }: { rows: PaperRow[] }) {
+export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectName?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const active = rows.some((r) => r.status === "processing" || r.status === "uploaded");
@@ -56,7 +56,7 @@ export function PapersTable({ rows }: { rows: PaperRow[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-        No papers yet. Upload a ZIP of question papers to get started.
+        No {subjectName ? `${subjectName} ` : ""}papers yet. Upload one above.
       </div>
     );
   }
@@ -94,9 +94,9 @@ export function PapersTable({ rows }: { rows: PaperRow[] }) {
                 <td className="px-4 py-3 text-right tabular-nums">{r.questionCount}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    {(r.status === "needs_review" || r.status === "published") && (
+                    {(r.status === "needs_review" || r.status === "published" || r.status === "failed") && (
                       <Link href={`/admin/papers/${r.id}`} className="inline-flex h-7 items-center rounded-md bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/80">
-                        Review
+                        {r.status === "failed" ? "Mark by hand" : "Review"}
                       </Link>
                     )}
                     <a href={`/api/papers/${r.id}/file`} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center rounded-md px-2 text-xs hover:bg-muted">

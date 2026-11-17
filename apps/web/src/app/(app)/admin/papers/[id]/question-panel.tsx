@@ -73,8 +73,9 @@ export function QuestionPanel({
           </button>
         ))}
       </div>
+      <AddQuestion data={data} busy={busy} run={run} api={api} />
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
-        {shown.length === 0 && <p className="p-4 text-center text-sm text-muted-foreground">Nothing to fix. 🎉</p>}
+        {shown.length === 0 && data.questions.length > 0 && <p className="p-4 text-center text-sm text-muted-foreground">Nothing to fix. 🎉</p>}
         {shown.map((q) => (
           <QuestionCard
             key={q.id}
@@ -250,8 +251,45 @@ function QuestionCard({
               Merge with Q{q.number + 1}
             </button>
           )}
+          <button
+            disabled={busy}
+            onClick={() =>
+              confirm(`Delete Q${q.number} with its parts and boxes?`) && run(() => api(`/api/admin/questions/${q.id}`, "DELETE"), `Q${q.number} deleted`)
+            }
+            className={cn("h-7 rounded-md border px-2 text-xs text-red-700 hover:bg-red-50", isLast && "ml-auto")}
+          >
+            Delete
+          </button>
         </div>
       )}
     </div>
+  );
+}
+
+/** Add a question by hand; then select it and Shift+drag on the page to draw its box. */
+function AddQuestion({ data, busy, run, api }: { data: ReviewData; busy: boolean; run: Run; api: Api }) {
+  const next = Math.max(0, ...data.questions.map((q) => q.number)) + 1;
+  const [number, setNumber] = useState("");
+  const [marks, setMarks] = useState("");
+  return (
+    <form
+      className="flex items-center gap-1.5 border-b px-3 py-2 text-xs"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!marks) return;
+        void run(
+          () => api(`/api/admin/papers/${data.paper.id}/questions`, "POST", { number: Number(number || next), totalMarks: Number(marks) }),
+          `Q${number || next} added — select it and Shift+drag on the page to draw its box`,
+        ).then(() => {
+          setNumber("");
+          setMarks("");
+        });
+      }}
+    >
+      <span className="font-medium">Add question</span>
+      <input aria-label="Question number" placeholder={`Q${next}`} value={number} onChange={(e) => setNumber(e.target.value.replace(/\D/g, ""))} className="h-7 w-14 rounded-md border px-1.5" />
+      <input aria-label="Total marks" placeholder="marks" value={marks} onChange={(e) => setMarks(e.target.value.replace(/\D/g, ""))} className="h-7 w-14 rounded-md border px-1.5" />
+      <button disabled={busy || !marks} className="ml-auto h-7 rounded-md bg-primary px-2 text-primary-foreground disabled:opacity-50">Add</button>
+    </form>
   );
 }

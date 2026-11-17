@@ -1,8 +1,10 @@
 from .base import BaseParser
 from .edexcel import EdexcelParser
+from .manual import ManualParser
 
 PARSERS: dict[str, type[BaseParser]] = {
     "edexcel": EdexcelParser,
+    "manual": ManualParser,
 }
 
 

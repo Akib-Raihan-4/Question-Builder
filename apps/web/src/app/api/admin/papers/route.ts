@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     bytes: new Uint8Array(await file.arrayBuffer()),
     filename: file.name,
     uploadedBy: u.userId,
+    autoDetect: form.get("autoDetect") !== "false",
   });
   if (!result.ok) {
     const status = result.code === "duplicate" ? 409 : result.code === "invalid" ? 400 : 502;

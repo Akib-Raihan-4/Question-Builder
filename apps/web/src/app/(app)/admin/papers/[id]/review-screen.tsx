@@ -11,6 +11,7 @@ import { publishIssues } from "@/lib/review/checks";
 import type { ReviewData, ReviewRegion } from "@/lib/review/types";
 import { BoxOverlay, type Owner } from "./box-overlay";
 import { QuestionPanel } from "./question-panel";
+import { DetailsForm } from "./details-form";
 
 const STATUS_CLS: Record<string, string> = {
   needs_review: "bg-amber-100 text-amber-800",
@@ -37,6 +38,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const [regionId, setRegionId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const { doc, error } = usePdf(`/api/papers/${initial.paper.id}/file`);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewerWidth, setViewerWidth] = useState(760);
@@ -169,13 +171,14 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
       <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5">
         <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">← Past papers</Link>
         <div className="min-w-0">
-          <div className="truncate font-semibold">{data.paper.label}</div>
+          <div className="truncate font-semibold">{data.paper.paperCode} · {data.paper.series} {data.paper.year}</div>
           <div className="text-xs text-muted-foreground">
             {data.paper.subject} · {data.questions.length} questions ·{" "}
             {data.questions.reduce((s, q) => s + q.totalMarks, 0)} marks · parser {data.paper.parserVersion ?? "–"}
           </div>
         </div>
         <Badge className={STATUS_CLS[data.paper.status]}>{data.paper.status.replace("_", " ")}</Badge>
+        <Button size="sm" variant="ghost" onClick={() => setEditing((e) => !e)}>{editing ? "Close details" : "Edit details"}</Button>
         <div className="ml-auto flex items-center gap-2">
           {issues.length > 0 && !published && (
             <span className="text-xs text-amber-700">{issues.length} thing{issues.length === 1 ? "" : "s"} to fix before publishing</span>
@@ -183,8 +186,14 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy || data.paper.structureEdited}
-            title={data.paper.structureEdited ? "Questions were split/merged by hand, so this paper can't be re-run" : "Run the parser again. Boxes and marks you edited are kept."}
+            disabled={busy || data.paper.structureEdited || data.paper.parserKey === "manual"}
+            title={
+              data.paper.parserKey === "manual"
+                ? "This paper's questions are marked by hand (change it under Edit details)"
+                : data.paper.structureEdited
+                  ? "Questions were added, split or merged by hand, so this paper can't be re-run"
+                  : "Run the parser again. Boxes and marks you edited are kept."
+            }
             onClick={() =>
               confirm("Run the parser on this paper again? Boxes, marks and labels you edited are kept.") &&
               run(async () => {
@@ -215,6 +224,26 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
           )}
         </div>
       </div>
+
+      {editing && (
+        <DetailsForm
+          data={data}
+          onCancel={() => setEditing(false)}
+          onSave={(body) =>
+            run(async () => {
+              await api(`/api/admin/papers/${paperId}`, "PATCH", body);
+              setEditing(false);
+            }, "Details saved")
+          }
+        />
+      )}
+      {(data.paper.statusReason || data.questions.length === 0) && (
+        <div className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          {data.questions.length === 0
+            ? "No questions yet. Use “Add question” on the right, then hold Shift and drag on the page to draw its box."
+            : data.paper.statusReason}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/* Pages */}

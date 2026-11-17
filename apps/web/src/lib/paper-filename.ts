@@ -4,6 +4,8 @@
  * Supported:
  *   4MA1_1H_2020_06_qp.pdf                         (plan's canonical form)
  *   IGCSE_MATHEMATICS_B_2021_MayJune_P1_QP.pdf     (common download-site form)
+ *   WPH13_01_que_20240123.pdf                      (Pearson's own file names)
+ * Anything else is read from the cover page instead (see /api/admin/papers/inspect).
  */
 
 export type ParsedPaperName = {
@@ -14,7 +16,7 @@ export type ParsedPaperName = {
   tier: "F" | "H" | null;
 };
 
-export const SERIES = ["January", "June", "November"] as const;
+export const SERIES = ["January", "June", "October", "November"] as const;
 export type Series = (typeof SERIES)[number];
 
 const SUBJECT_WORDS: Record<string, string> = {
@@ -31,8 +33,8 @@ const MONTH_TO_SERIES: Record<string, Series> = {
   "01": "January", "1": "January", JAN: "January", JANUARY: "January",
   "05": "June", "06": "June", "5": "June", "6": "June", MAY: "June", JUN: "June", JUNE: "June",
   MAYJUNE: "June", MJ: "June", SUMMER: "June",
-  "10": "November", "11": "November", OCT: "November", NOV: "November", NOVEMBER: "November",
-  OCTNOV: "November", ON: "November",
+  "11": "November", NOV: "November", NOVEMBER: "November", OCTNOV: "November", ON: "November",
+  "10": "October", OCT: "October", OCTOBER: "October",
 };
 
 /** Paper part of a code: "1H" stays, "1" → "01", "1R" → "01R". */
@@ -66,6 +68,16 @@ export function parsePaperFilename(filename: string): ParsedPaperName | null {
     const specCode = SUBJECT_WORDS[subjectWords];
     const series = MONTH_TO_SERIES[month];
     if (!specCode || !series) return null;
+    const { paper, tier } = normalizePaper(paperRaw);
+    return { specCode, paperCode: `${specCode}/${paper}`, series, year: Number(year), tier };
+  }
+
+  // WPH13_01_que_20240123 / 4MA1_1H_que_20200605 (Pearson qualifications site)
+  m = base.match(/^([0-9A-Z]{4,6})_([0-9]{1,2}[A-Z]{0,3})_(?:QUE|QP)_(20\d{2})(\d{2})\d{2}/);
+  if (m) {
+    const [, specCode, paperRaw, year, month] = m;
+    const series = MONTH_TO_SERIES[month];
+    if (!series) return null;
     const { paper, tier } = normalizePaper(paperRaw);
     return { specCode, paperCode: `${specCode}/${paper}`, series, year: Number(year), tier };
   }

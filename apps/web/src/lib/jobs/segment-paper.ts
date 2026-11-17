@@ -180,7 +180,13 @@ export async function saveSegmentResult(paperId: string, r: SegmentResult) {
     }
 
     const failed = r.status === "failed";
-    const reason = failed ? r.reason : r.questions.length === 0 ? "Parser found no questions." : r.warnings.join(" ") || null;
+    const reason = failed
+      ? r.reason
+      : r.parser_key === "manual"
+        ? "Questions are marked by hand: add each question, then draw its box."
+        : r.questions.length === 0
+          ? "No questions were found automatically — add them by hand."
+          : r.warnings.join(" ") || null;
     await tx
       .update(schema.papers)
       .set({

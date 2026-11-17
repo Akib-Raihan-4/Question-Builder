@@ -90,6 +90,7 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
             <option value="">Any series</option>
             <option>January</option>
             <option>June</option>
+            <option>October</option>
             <option>November</option>
           </select>
           <span className="flex items-center gap-1 text-muted-foreground">

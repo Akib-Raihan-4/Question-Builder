@@ -41,6 +41,13 @@ export type ReviewPaper = {
   structureEdited: boolean;
   parserVersion: string | null;
   pageCount: number | null;
+  statusReason: string | null;
+  subjectId: string;
+  paperCode: string;
+  series: string;
+  year: number;
+  tier: "F" | "H" | null;
+  parserKey: string;
 };
 
 export type ReviewData = {
@@ -49,4 +56,5 @@ export type ReviewData = {
   parts: ReviewPart[];
   regions: ReviewRegion[];
   topics: ReviewTopic[];
+  subjects: { id: string; label: string }[];
 };
