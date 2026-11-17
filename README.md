@@ -52,7 +52,7 @@ and sent to the processor; the paper then shows **Needs review**. PDFs are only 
 Shift+drag to draw a box for the selected question/part, Delete to remove one. Fix marks, add or
 remove parts, split/merge questions and pick topics in the side panel. Hand-edited boxes, marks and
 labels are kept when the parser re-runs. **Publish** is enabled once every question's part marks add
-up to its total and every question has a topic.
+up to its total and every question and part has a box.
 
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 

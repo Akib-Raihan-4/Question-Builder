@@ -131,7 +131,7 @@ Output is versioned with `parser_version`.
 
 PDF page left (pdf.js canvas + SVG overlay), question list right. Question = blue outline, part = lighter
 fill, low confidence = orange. Drag/resize, draw with modifier key. Split/merge questions, add/remove part,
-re-run parser. Publish enabled only when every marks-sum check passes and every question has a topic.
+re-run parser. Publish enabled only when every marks-sum check passes (topics are not required while tagging is postponed).
 Edits save debounced; `edited_by_admin` regions survive parser re-runs.
 
 ## Teacher builder UI
@@ -166,7 +166,9 @@ Later: DOCX export, answer-space control, shuffled versions.
 3. **Segmentation** — processor endpoint, noise filtering, question/part/marks, regions, confidence, golden tests.
    *Done when:* on 3 Edexcel samples every number and total is found and part marks add up.
 4. **Review UI** — editable boxes, question panel, publish check. *Done when:* a fixed box survives a re-run.
-5. **Topic tagging** — Claude suggestions + confirm UI.
+5. **Topic tagging** — *postponed (decided 17 Nov 2026): no categorising for now.* Topics are not
+   required to publish and the topic picker is hidden. The AI-suggestion work is parked in
+   `git stash` ("Phase 5: AI topic tagging (parked …)") if it's wanted later.
 6. **Teacher builder** — click targets, store, preview, reorder, totals, save/load.
    *Done when:* 2020 Q3(a) then 2021 Q8 show as 1 and 2 with correct marks; reorder renumbers.
 7. **Export** — layout engine. *Done when:* no old numbers/Total lines; text selectable.

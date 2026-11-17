@@ -27,9 +27,13 @@ describe("publishIssues", () => {
     expect(issues.map((i) => i.message)).toEqual(["Part marks add up to 3, not 4"]);
   });
 
-  it("flags missing topics and boxes", () => {
-    const issues = publishIssues([q("q1", 2, [])], [part("a", "q1", 2)], []);
-    expect(issues.map((i) => i.message)).toEqual(["Part (a) has no box", "No box on the page", "No topic"]);
+  it("flags missing boxes", () => {
+    const issues = publishIssues([q("q1", 2)], [part("a", "q1", 2)], []);
+    expect(issues.map((i) => i.message)).toEqual(["Part (a) has no box", "No box on the page"]);
+  });
+
+  it("does not require topics", () => {
+    expect(publishIssues([q("q1", 2, [])], [], [box("question", "q1")])).toEqual([]);
   });
 
   it("flags an empty paper", () => {

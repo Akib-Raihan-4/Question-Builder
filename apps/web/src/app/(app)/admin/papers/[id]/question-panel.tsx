@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { QuestionIssue } from "@/lib/review/checks";
-import type { ReviewData, ReviewQuestion, ReviewTopic } from "@/lib/review/types";
+import type { ReviewData, ReviewQuestion } from "@/lib/review/types";
 import { cn } from "@/lib/utils";
 import type { Owner } from "./box-overlay";
 
@@ -214,12 +214,6 @@ function QuestionCard({
         </div>
       )}
 
-      <TopicPicker
-        topics={data.topics}
-        value={q.topicIds}
-        onChange={(ids) => run(() => api(`/api/admin/questions/${q.id}`, "PATCH", { topicIds: ids }))}
-      />
-
       {issues.length > 0 && (
         <ul className="mt-2 space-y-0.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
           {issues.map((i) => <li key={i.message}>{i.message}</li>)}
@@ -256,51 +250,6 @@ function QuestionCard({
               Merge with Q{q.number + 1}
             </button>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TopicPicker({ topics, value, onChange }: { topics: ReviewTopic[]; value: string[]; onChange: (ids: string[]) => void }) {
-  const [open, setOpen] = useState(false);
-  const byId = new Map(topics.map((t) => [t.id, t]));
-  const roots = topics.filter((t) => !t.parentId);
-  const childrenOf = (id: string) => topics.filter((t) => t.parentId === id);
-  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
-
-  return (
-    <div className="mt-2">
-      <div className="flex flex-wrap items-center gap-1">
-        {value.map((id) => (
-          <span key={id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-900">
-            {byId.get(id)?.code} {byId.get(id)?.name}
-            <button onClick={() => toggle(id)} className="text-emerald-700 hover:text-red-600" aria-label="Remove topic">×</button>
-          </span>
-        ))}
-        <button onClick={() => setOpen((o) => !o)} className="rounded-full border border-dashed px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground">
-          {open ? "Done" : value.length ? "+ topic" : "+ add topic"}
-        </button>
-      </div>
-      {open && (
-        <div className="mt-1.5 max-h-56 overflow-y-auto rounded-md border p-1.5 text-xs">
-          {roots.map((r) => {
-            const kids = childrenOf(r.id);
-            return (
-              <div key={r.id} className="mb-1">
-                <label className="flex items-center gap-1.5 font-medium">
-                  <input type="checkbox" checked={value.includes(r.id)} onChange={() => toggle(r.id)} />
-                  {r.code} {r.name}
-                </label>
-                {kids.map((k) => (
-                  <label key={k.id} className="ml-5 flex items-center gap-1.5">
-                    <input type="checkbox" checked={value.includes(k.id)} onChange={() => toggle(k.id)} />
-                    {k.code} {k.name}
-                  </label>
-                ))}
-              </div>
-            );
-          })}
         </div>
       )}
     </div>

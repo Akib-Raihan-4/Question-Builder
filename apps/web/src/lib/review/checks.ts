@@ -24,7 +24,7 @@ export function publishIssues(
       }
     }
     if (!regions.some((r) => r.ownerType === "question" && r.ownerId === q.id)) add("No box on the page");
-    if (q.topicIds.length === 0) add("No topic");
+    // Topics are optional for now (topic tagging is postponed); search by topic comes later.
   }
   return issues;
 }
