@@ -54,12 +54,16 @@ remove parts, split/merge questions and pick topics in the side panel. Hand-edit
 labels are kept when the parser re-runs. **Publish** is enabled once every question's part marks add
 up to its total and every question and part has a box.
 
-**Builder** (teachers): *My papers* → *New paper*. Pick a published past paper on the left; click a
+**Builder** (teachers): *My papers* → *New paper*. On the left, either **Search questions** across all
+published papers (text, year, series, marks range; sort by paper, marks or most used) and add whole
+questions or single parts from the result cards, or **Browse a paper**: pick a published past paper and click a
 part to add it, or the **+** tab in the number column to add the whole question (click again to
 remove). The right side is a live preview: questions are numbered in pick order, totals use the
 board's "(Total for Question N is M marks)" line, drag ⠿ to reorder, and the paper auto-saves. **Export PDF** downloads the paper: A4, 20 mm
 margins, the header block, each question's original content embedded as vector (text stays
 selectable), new numbers and Total lines, page numbers and "TOTAL FOR PAPER IS N MARKS".
+*My papers* shows each paper's questions and marks, with Duplicate and Delete. Admins see
+**Usage**: papers built, questions picked and the most-used questions.
 
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 

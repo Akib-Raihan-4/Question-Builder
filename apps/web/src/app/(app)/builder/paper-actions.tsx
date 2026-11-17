@@ -40,3 +40,24 @@ export function DeletePaperButton({ id, title }: { id: string; title: string }) 
     </Button>
   );
 }
+
+export function DuplicatePaperButton({ id }: { id: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const res = await fetch(`/api/built-papers/${id}/duplicate`, { method: "POST" });
+        setBusy(false);
+        if (res.ok) router.refresh();
+        else alert("Could not duplicate this paper");
+      }}
+    >
+      {busy ? "Copying…" : "Duplicate"}
+    </Button>
+  );
+}

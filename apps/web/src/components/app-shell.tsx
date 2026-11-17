@@ -18,8 +18,9 @@ export function AppShell({
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href="/"><Logo /></Link>
           <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-            <Link href="/builder" className="hover:text-foreground">Builder</Link>
+            <Link href="/builder" className="hover:text-foreground">My papers</Link>
             {role === "admin" && <Link href="/admin" className="hover:text-foreground">Past papers</Link>}
+            {role === "admin" && <Link href="/admin/usage" className="hover:text-foreground">Usage</Link>}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="hidden text-muted-foreground sm:inline">{user.name}</span>

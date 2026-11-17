@@ -175,7 +175,8 @@ Later: DOCX export, answer-space control, shuffled versions.
 6. **Teacher builder** — click targets, store, preview, reorder, totals, save/load.
    *Done when:* 2020 Q3(a) then 2021 Q8 show as 1 and 2 with correct marks; reorder renumbers.
 7. **Export** — layout engine. *Done when:* no old numbers/Total lines; text selectable.
-8. **Search + polish** — search, My papers, duplicate, empty states, analytics.
+8. **Search + polish** — search (text, year, series, marks; topic search waits for topics), My papers
+   with totals, duplicate, empty/error states, usage analytics (most-used questions).
    *Done when:* a 50-mark topic test from search alone in under 5 minutes.
 
 ## Working rules

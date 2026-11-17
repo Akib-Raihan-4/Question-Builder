@@ -7,6 +7,7 @@ import { getPdfDoc } from "@/components/pdf/pdf-cache";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
+import { SearchPane } from "./search-pane";
 
 export type SourcePaper = {
   id: string;
@@ -28,6 +29,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
     for (const s of sources) m.set(s.subjectId, `${s.specCode} ${s.subject}`);
     return [...m];
   }, [sources]);
+  const [mode, setMode] = useState<"browse" | "search">("browse");
   const [subjectId, setSubjectId] = useState(subjects[0]?.[0] ?? "");
   const papers = sources.filter((s) => s.subjectId === subjectId);
   const [paperId, setPaperId] = useState(papers[0]?.id ?? "");
@@ -98,6 +100,17 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
+        <div className="inline-flex rounded-lg bg-muted p-0.5 text-sm">
+          {(["browse", "search"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={mode === m ? "rounded-md bg-background px-2.5 py-1 font-medium shadow-sm" : "px-2.5 py-1 text-muted-foreground hover:text-foreground"}
+            >
+              {m === "browse" ? "Browse a paper" : "Search questions"}
+            </button>
+          ))}
+        </div>
         <select
           className={selectCls}
           value={subjectId}
@@ -109,15 +122,16 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
         >
           {subjects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
-        <select className={`${selectCls} min-w-0 flex-1`} value={paperId} onChange={(e) => setPaperId(e.target.value)} aria-label="Past paper">
+        {mode === "browse" && <select className={`${selectCls} min-w-0 flex-1`} value={paperId} onChange={(e) => setPaperId(e.target.value)} aria-label="Past paper">
           {papers.map((p) => (
             <option key={p.id} value={p.id}>
               {p.year} {p.series} · {p.paperCode}{p.tier ? ` (${p.tier === "H" ? "Higher" : "Foundation"})` : ""}
             </option>
           ))}
-        </select>
+        </select>}
       </div>
-      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto bg-zinc-200/70 px-5 py-4">
+      {mode === "search" && <SearchPane subjectId={subjectId} sources={sources} />}
+      <div ref={ref} hidden={mode === "search"} className="min-h-0 flex-1 overflow-y-auto bg-zinc-200/70 px-5 py-4">
         <p className="mx-auto mb-3 max-w-2xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
           Click a part to add it, or the <span className="rounded bg-blue-600 px-1 font-bold text-white">+</span> tab to add the whole
           question. Click again to remove. Questions are numbered in the order you pick them.
