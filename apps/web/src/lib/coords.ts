@@ -48,15 +48,28 @@ export function flipY(y: number, pageHeight: number): number {
   return pageHeight - y;
 }
 
-/** PDF points (top-left) → pdf-lib embedPage bounding box (bottom-left). */
-export function pdfToPdfLib(r: PdfRect, pageHeight: number): PdfLibBox {
+/**
+ * PDF points (top-left) → pdf-lib embedPage bounding box (bottom-left).
+ * `pageHeight` and `origin` are the source page's CropBox (PyMuPDF measures from the CropBox's
+ * top-left; pdf-lib works in default user space, so a CropBox that doesn't start at 0,0 shifts it).
+ */
+export function pdfToPdfLib(r: PdfRect, pageHeight: number, origin: { x: number; y: number } = { x: 0, y: 0 }): PdfLibBox {
   const n = normalizeRect(r);
   return {
-    left: n.x0,
-    right: n.x1,
-    bottom: flipY(n.y1, pageHeight),
-    top: flipY(n.y0, pageHeight),
+    left: origin.x + n.x0,
+    right: origin.x + n.x1,
+    bottom: origin.y + flipY(n.y1, pageHeight),
+    top: origin.y + flipY(n.y0, pageHeight),
   };
+}
+
+/**
+ * Our own output pages are laid out top-down (like the stored regions). pdf-lib draws from the
+ * bottom-left corner of a box, so a box whose top edge is `top` and that is `height` tall sits
+ * at y = pageHeight - top - height.
+ */
+export function topDownToPdfLibY(top: number, height: number, pageHeight: number): number {
+  return pageHeight - top - height;
 }
 
 /** pdf-lib box (bottom-left) → PDF points (top-left). */

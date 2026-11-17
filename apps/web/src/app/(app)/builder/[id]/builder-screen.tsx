@@ -17,6 +17,9 @@ export function BuilderScreen({ paper, sources }: Props) {
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState("Saved");
   const savedVersion = useRef(0);
+  const saveRef = useRef<(() => Promise<void>) | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const itemCount = useBuilder((st) => st.items.length);
 
   // Load this paper into the store once.
   useEffect(() => {
@@ -48,6 +51,7 @@ export function BuilderScreen({ paper, sources }: Props) {
         setSaveState(`Not saved: ${(e as Error).message}`);
       }
     };
+    saveRef.current = save;
     const unsub = useBuilder.subscribe((s, prev) => {
       if (s.version === prev.version) return;
       setSaveState("Unsaved changes");
@@ -72,6 +76,30 @@ export function BuilderScreen({ paper, sources }: Props) {
     <div className="-my-8 ml-[calc(50%-50vw)] flex h-[calc(100vh-3.5rem)] w-screen flex-col">
       <div className="flex items-center gap-3 border-b bg-background px-4 py-2 text-sm">
         <Link href="/builder" className="text-muted-foreground hover:text-foreground">← My papers</Link>
+        <button
+          disabled={!itemCount || exporting}
+          onClick={async () => {
+            setExporting(true);
+            try {
+              await saveRef.current?.(); // export what's on screen
+              const res = await fetch(`/api/built-papers/${paper.id}/export`);
+              if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Export failed");
+              const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "paper.pdf";
+              const url = URL.createObjectURL(await res.blob());
+              const a = Object.assign(document.createElement("a"), { href: url, download: name });
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(url), 10_000);
+            } catch (e) {
+              alert((e as Error).message);
+            } finally {
+              setExporting(false);
+            }
+          }}
+          className="ml-auto inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+          title={itemCount ? "Download this paper as a PDF" : "Add some questions first"}
+        >
+          {exporting ? "Exporting…" : "Export PDF"}
+        </button>
       </div>
       <div className="flex min-h-0 flex-1">
         {ready && <BrowsePane sources={sources} />}

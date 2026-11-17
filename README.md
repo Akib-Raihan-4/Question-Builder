@@ -57,7 +57,9 @@ up to its total and every question and part has a box.
 **Builder** (teachers): *My papers* → *New paper*. Pick a published past paper on the left; click a
 part to add it, or the **+** tab in the number column to add the whole question (click again to
 remove). The right side is a live preview: questions are numbered in pick order, totals use the
-board's "(Total for Question N is M marks)" line, drag ⠿ to reorder, and the paper auto-saves.
+board's "(Total for Question N is M marks)" line, drag ⠿ to reorder, and the paper auto-saves. **Export PDF** downloads the paper: A4, 20 mm
+margins, the header block, each question's original content embedded as vector (text stays
+selectable), new numbers and Total lines, page numbers and "TOTAL FOR PAPER IS N MARKS".
 
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flipY, normalizeRect, pdfLibToPdf, pdfToPdfLib, pdfToScreen, rectSize, screenToPdf } from "./coords";
+import { flipY, normalizeRect, pdfLibToPdf, pdfToPdfLib, pdfToScreen, rectSize, screenToPdf, topDownToPdfLibY } from "./coords";
 
 const A4_H = 841.89;
 const rect = { x0: 60, y0: 100, x1: 540, y1: 300 };
@@ -50,6 +50,20 @@ describe("pdf-lib (bottom-left) conversion", () => {
     const b = pdfToPdfLib(rect, A4_H);
     expect(b.right - b.left).toBeCloseTo(rectSize(rect).width);
     expect(b.top - b.bottom).toBeCloseTo(rectSize(rect).height);
+  });
+});
+
+describe("pdf-lib with an offset CropBox", () => {
+  it("shifts the box by the CropBox origin", () => {
+    const b = pdfToPdfLib(rect, 800, { x: 10, y: 20 });
+    expect(b).toEqual({ left: 70, right: 550, bottom: 20 + 800 - 300, top: 20 + 800 - 100 });
+  });
+});
+
+describe("top-down layout → pdf-lib", () => {
+  it("places a box's bottom edge from its top and height", () => {
+    expect(topDownToPdfLibY(56.69, 100, A4_H)).toBeCloseTo(A4_H - 156.69);
+    expect(topDownToPdfLibY(0, A4_H, A4_H)).toBe(0);
   });
 });
 

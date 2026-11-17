@@ -155,6 +155,9 @@ duplicate. Cache rendered pages as ImageBitmap keyed `paperId:page`; lazy-load.
 pdf-lib `embedPage` with `{left: x0, right: x1, bottom: H - y1, top: H - y0}`. A4, 20 mm margins: header
 block, then per item: bold number, regions top to bottom, board-style total line right-aligned. Scale down
 only if too wide, never up. Never split a region. Footer: page numbers + "Total for paper = X marks".
+Implemented refinements: a region that misses fitting by a little is shrunk (≥ 85%) rather than
+leaving a near-empty page, and a short region (e.g. a question's opening lines before a chosen
+part) is kept on the same page as the next region.
 Later: DOCX export, answer-space control, shuffled versions.
 
 ## Build phases
