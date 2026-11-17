@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +80,9 @@ export function PapersTable({ rows }: { rows: PaperRow[] }) {
             return (
               <tr key={r.id} className="align-top">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{r.paperCode}{r.tier ? ` · ${r.tier === "H" ? "Higher" : "Foundation"}` : ""}</div>
+                  <Link href={`/admin/papers/${r.id}`} className="font-medium hover:underline">
+                    {r.paperCode}{r.tier ? ` · ${r.tier === "H" ? "Higher" : "Foundation"}` : ""}
+                  </Link>
                   <div className="text-xs text-muted-foreground">{r.subject}</div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{r.series} {r.year}</td>
@@ -91,6 +94,11 @@ export function PapersTable({ rows }: { rows: PaperRow[] }) {
                 <td className="px-4 py-3 text-right tabular-nums">{r.questionCount}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
+                    {(r.status === "needs_review" || r.status === "published") && (
+                      <Link href={`/admin/papers/${r.id}`} className="inline-flex h-7 items-center rounded-md bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/80">
+                        Review
+                      </Link>
+                    )}
                     <a href={`/api/papers/${r.id}/file`} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center rounded-md px-2 text-xs hover:bg-muted">
                       PDF
                     </a>

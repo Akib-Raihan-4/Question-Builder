@@ -40,9 +40,19 @@ npm run processor         # PDF processor on :8000 (separate terminal)
 npm run dev               # http://localhost:3000 — also runs the pg-boss job worker
 ```
 
+> The job worker is loaded once when `npm run dev` starts; after changing code under
+> `src/lib/jobs/`, restart the dev server. To build while dev is running:
+> `NEXT_DIST_DIR=.next-build npx next build` (in `apps/web`).
+
 Upload papers at **Past papers** (admin): a ZIP or single PDFs. Each upload is stored privately, queued,
 and sent to the processor; the paper then shows **Needs review**. PDFs are only ever served through
 `/api/papers/:id/file` to logged-in users (teachers only see published papers).
+
+**Review** a paper to check every box on the page: drag to move, drag handles to resize,
+Shift+drag to draw a box for the selected question/part, Delete to remove one. Fix marks, add or
+remove parts, split/merge questions and pick topics in the side panel. Hand-edited boxes, marks and
+labels are kept when the parser re-runs. **Publish** is enabled once every question's part marks add
+up to its total and every question has a topic.
 
 Sign-up is disabled; create teacher accounts with `npm run user:create -- <email> <password> teacher "<Name>"`.
 

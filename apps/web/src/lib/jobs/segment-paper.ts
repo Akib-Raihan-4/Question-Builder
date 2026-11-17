@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getObjectBytes } from "@/lib/storage";
 
@@ -52,60 +52,135 @@ export async function setPaperStatus(
     .where(eq(schema.papers.id, paperId));
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
- * Replace a paper's auto-segmented questions with a fresh processor result.
- * (Phase 4 will keep regions with edited_by_admin = true across re-runs.)
+ * Replace an owner's regions with fresh parser output — unless an admin has edited any of
+ * them, in which case the admin's boxes win and the parser's are ignored.
+ */
+async function syncRegions(tx: Tx, ownerType: "question" | "part", ownerId: string, fresh: PRegion[]) {
+  const current = await tx
+    .select({ id: schema.regions.id, edited: schema.regions.editedByAdmin })
+    .from(schema.regions)
+    .where(and(eq(schema.regions.ownerType, ownerType), eq(schema.regions.ownerId, ownerId)));
+  if (current.some((r) => r.edited)) return "kept";
+  if (current.length) {
+    await tx.delete(schema.regions).where(inArray(schema.regions.id, current.map((r) => r.id)));
+  }
+  if (fresh.length) {
+    await tx.insert(schema.regions).values(fresh.map((rg, i) => ({ ownerType, ownerId, sortOrder: i, ...rg })));
+  }
+  return "replaced";
+}
+
+/**
+ * Merge a processor result into the paper's question bank.
+ *
+ * Re-runs must never undo admin work, and question/part ids must stay stable because
+ * teachers' built papers point at them. So rows are matched (questions by number, parts by
+ * label) and updated in place:
+ *   - regions with edited_by_admin: the owner's boxes are kept as they are
+ *   - questions/parts with edited_by_admin: their marks/labels are kept
+ *   - rows the parser no longer finds are removed only if untouched and unused
  */
 export async function saveSegmentResult(paperId: string, r: SegmentResult) {
   await db.transaction(async (tx) => {
-    const old = await tx
-      .select({ id: schema.questions.id })
-      .from(schema.questions)
-      .where(eq(schema.questions.paperId, paperId));
-    const oldQ = old.map((q) => q.id);
-    if (oldQ.length) {
-      const oldParts = await tx
-        .select({ id: schema.questionParts.id })
-        .from(schema.questionParts)
-        .where(inArray(schema.questionParts.questionId, oldQ));
-      const owners = [...oldQ, ...oldParts.map((p) => p.id)];
-      await tx.delete(schema.regions).where(inArray(schema.regions.ownerId, owners));
-      await tx.delete(schema.questions).where(eq(schema.questions.paperId, paperId)); // cascades parts
-    }
+    const existing = await tx.select().from(schema.questions).where(eq(schema.questions.paperId, paperId));
+    const byNumber = new Map(existing.map((q) => [q.number, q]));
+    const seen = new Set<string>();
 
     for (const q of r.questions) {
-      const [qRow] = await tx
-        .insert(schema.questions)
-        .values({
-          paperId,
-          number: q.number,
-          totalMarks: q.total_marks,
-          confidence: q.confidence,
-          warnings: q.warnings,
-          text: q.text,
-        })
-        .returning({ id: schema.questions.id });
-      const regionRows: (typeof schema.regions.$inferInsert)[] = q.regions.map((rg, i) => ({
-        ownerType: "question" as const, ownerId: qRow.id, sortOrder: i, ...rg,
-      }));
-      for (const [pi, p] of q.parts.entries()) {
-        const [pRow] = await tx
-          .insert(schema.questionParts)
-          .values({ questionId: qRow.id, label: p.label, sortOrder: pi, marks: p.marks, text: p.text })
-          .returning({ id: schema.questionParts.id });
-        regionRows.push(
-          ...p.regions.map((rg, i) => ({ ownerType: "part" as const, ownerId: pRow.id, sortOrder: i, ...rg })),
-        );
+      const ex = byNumber.get(q.number);
+      let questionId: string;
+      if (!ex) {
+        const [row] = await tx
+          .insert(schema.questions)
+          .values({
+            paperId, number: q.number, totalMarks: q.total_marks, confidence: q.confidence,
+            warnings: q.warnings, text: q.text,
+          })
+          .returning({ id: schema.questions.id });
+        questionId = row.id;
+      } else {
+        questionId = ex.id;
+        await tx
+          .update(schema.questions)
+          .set({
+            confidence: q.confidence,
+            warnings: q.warnings,
+            text: q.text,
+            ...(ex.editedByAdmin ? {} : { totalMarks: q.total_marks }),
+          })
+          .where(eq(schema.questions.id, ex.id));
       }
-      if (regionRows.length) await tx.insert(schema.regions).values(regionRows);
+      seen.add(questionId);
+      await syncRegions(tx, "question", questionId, q.regions);
+
+      const exParts = ex
+        ? await tx.select().from(schema.questionParts).where(eq(schema.questionParts.questionId, questionId))
+        : [];
+      const partsByLabel = new Map(exParts.map((p) => [p.label, p]));
+      const seenParts = new Set<string>();
+      for (const [pi, p] of q.parts.entries()) {
+        const exP = partsByLabel.get(p.label);
+        let partId: string;
+        if (!exP) {
+          const [row] = await tx
+            .insert(schema.questionParts)
+            .values({ questionId, label: p.label, sortOrder: pi, marks: p.marks, text: p.text })
+            .returning({ id: schema.questionParts.id });
+          partId = row.id;
+        } else {
+          partId = exP.id;
+          await tx
+            .update(schema.questionParts)
+            .set({ text: p.text, sortOrder: pi, ...(exP.editedByAdmin ? {} : { marks: p.marks }) })
+            .where(eq(schema.questionParts.id, exP.id));
+        }
+        seenParts.add(partId);
+        await syncRegions(tx, "part", partId, p.regions);
+      }
+      for (const old of exParts) {
+        if (seenParts.has(old.id) || old.editedByAdmin) continue;
+        const edited = await tx
+          .select({ id: schema.regions.id })
+          .from(schema.regions)
+          .where(and(eq(schema.regions.ownerId, old.id), eq(schema.regions.editedByAdmin, true)));
+        if (edited.length) continue;
+        await tx.delete(schema.regions).where(eq(schema.regions.ownerId, old.id));
+        await tx.delete(schema.questionParts).where(eq(schema.questionParts.id, old.id));
+      }
+    }
+
+    // Questions the parser no longer finds: drop them if nobody touched or used them.
+    for (const old of existing) {
+      if (seen.has(old.id) || old.editedByAdmin) continue;
+      const [used] = await tx
+        .select({ id: schema.builtPaperItems.id })
+        .from(schema.builtPaperItems)
+        .where(eq(schema.builtPaperItems.questionId, old.id))
+        .limit(1);
+      const partIds = (
+        await tx.select({ id: schema.questionParts.id }).from(schema.questionParts)
+          .where(eq(schema.questionParts.questionId, old.id))
+      ).map((p) => p.id);
+      const edited = await tx
+        .select({ id: schema.regions.id })
+        .from(schema.regions)
+        .where(and(inArray(schema.regions.ownerId, [old.id, ...partIds]), eq(schema.regions.editedByAdmin, true)));
+      if (used || edited.length) {
+        await tx
+          .update(schema.questions)
+          .set({ warnings: [...old.warnings, "The parser no longer finds this question; kept because it was edited or used"] })
+          .where(eq(schema.questions.id, old.id));
+        continue;
+      }
+      await tx.delete(schema.regions).where(inArray(schema.regions.ownerId, [old.id, ...partIds]));
+      await tx.delete(schema.questions).where(eq(schema.questions.id, old.id));
     }
 
     const failed = r.status === "failed";
-    const reason = failed
-      ? r.reason
-      : r.questions.length === 0
-        ? "Parser found no questions (segmentation rules arrive in Phase 3)."
-        : null;
+    const reason = failed ? r.reason : r.questions.length === 0 ? "Parser found no questions." : r.warnings.join(" ") || null;
     await tx
       .update(schema.papers)
       .set({
@@ -115,6 +190,7 @@ export async function saveSegmentResult(paperId: string, r: SegmentResult) {
         parserVersion: r.parser_version,
         status: failed ? "failed" : "needs_review",
         statusReason: reason,
+        publishedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(schema.papers.id, paperId));

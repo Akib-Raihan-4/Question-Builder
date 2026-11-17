@@ -136,6 +136,9 @@ export const papers = pgTable(
     parserVersion: text("parser_version"),
     status: paperStatus("status").notNull().default("uploaded"),
     statusReason: text("status_reason"),
+    /** Admin split/merged questions or added/removed parts: a parser re-run would undo that. */
+    structureEdited: boolean("structure_edited").notNull().default(false),
+    publishedAt: timestamp("published_at"),
     uploadedBy: text("uploaded_by").references(() => user.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -166,6 +169,8 @@ export const questions = pgTable(
     status: questionStatus("status").notNull().default("auto"),
     warnings: jsonb("warnings").$type<string[]>().notNull().default([]),
     text: text("text").notNull().default(""),
+    /** Admin changed total_marks; re-runs keep it. */
+    editedByAdmin: boolean("edited_by_admin").notNull().default(false),
   },
   (t) => [index("questions_paper_number_idx").on(t.paperId, t.number)],
 );
@@ -181,6 +186,8 @@ export const questionParts = pgTable(
     sortOrder: integer("sort_order").notNull(),
     marks: integer("marks").notNull().default(0),
     text: text("text").notNull().default(""),
+    /** Admin changed label/marks; re-runs keep them. */
+    editedByAdmin: boolean("edited_by_admin").notNull().default(false),
   },
   (t) => [index("question_parts_question_idx").on(t.questionId)],
 );

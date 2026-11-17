@@ -48,6 +48,8 @@ class EdexcelConfig:
     # Padding around detected lines
     pad_above: float = 3.0
     pad_below: float = 2.0
+    # Content closer than this above a question's first line is part of the question
+    chain_gap: float = 4.0
     total_line_pattern: str = r"\(\s*Total\s+for\s+Question\s+(\d+)\s+(?:is|=)\s+(\d+)\s+marks?\s*\)"
     paper_total_pattern: str = r"TOTAL\s+FOR\s+PAPER\s+(?:IS|=)\s+(\d+)\s+MARKS"
     part_marks_pattern: str = r"^\((\d{1,2})\)$"
@@ -78,7 +80,7 @@ class _Label:
 
 class EdexcelParser(BaseParser):
     key = "edexcel"
-    version = "1.0.0"
+    version = "1.0.1"
 
     def __init__(self, config: EdexcelConfig | None = None):
         self.c = config or EdexcelConfig()
@@ -160,16 +162,27 @@ class EdexcelParser(BaseParser):
         events.sort(key=lambda e: (e.page, round(e.y0, 1), order[e.kind]))
         return events, lines_by_page, paper_total
 
-    def _top(self, page: int, floor: float, line_y0: float) -> float:
-        """Top of a crop that starts at a line at `line_y0`: also take in anything drawn above
-        that line (tall maths, matrix brackets, diagrams) down from `floor`, the end of the
-        previous item on this page."""
-        tops = [
-            y0 for (x0, y0, x1, y1) in self._boxes.get(page, [])
-            if y1 > floor + 0.5 and y0 < line_y0 + 1 and x1 > self.c.crop_x0 and x0 < self.c.crop_x1
+    def _top(self, page: int, floor: float, line_y0: float, chain: bool = False) -> float:
+        """Top of a crop that starts at a line at `line_y0`, never above `floor` (the end of the
+        previous item on this page).
+
+        Content that straddles the line (tall maths, matrix brackets) can reach above it, so
+        that is taken in. With `chain` (question starts), content stacked directly on top of
+        that (e.g. upper matrix rows) is taken in too, until a clear gap — which keeps out
+        page instructions like "Answer ALL questions" sitting above question 1.
+        """
+        c = self.c
+        boxes = [
+            (y0, y1) for (x0, y0, x1, y1) in self._boxes.get(page, [])
+            if y1 > floor + 0.5 and x1 > c.crop_x0 and x0 < c.crop_x1
         ]
-        top = min([line_y0, *tops]) - self.c.pad_above
-        return max(top, floor)
+        top = min([line_y0, *[y0 for y0, y1 in boxes if y0 < line_y0 < y1 - 1]])
+        while chain:
+            above = [y0 for y0, y1 in boxes if y0 < top - 0.5 and y1 >= top - c.chain_gap]
+            if not above:
+                break
+            top = min(above)
+        return max(top - c.pad_above, floor)
 
     def _region(self, doc, page: int, y0: float, y1: float) -> Region:
         dx, dy = self._offset(doc[page])
@@ -237,7 +250,7 @@ class EdexcelParser(BaseParser):
                 end = (nxt.page, nxt.y0 - c.pad_above) if nxt else (s.page, c.content_bottom)
 
             floor = prev_end[1] if prev_end[0] == s.page else c.content_top
-            start_pos = (s.page, self._top(s.page, floor, s.y0))
+            start_pos = (s.page, self._top(s.page, floor, s.y0, chain=True))
             prev_end = (end[0], (total.y1 + c.pad_below) if total else end[1])
             in_q = [
                 e for e in events
