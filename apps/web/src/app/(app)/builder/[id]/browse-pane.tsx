@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfPageCanvas } from "@/components/pdf/pdf-page-canvas";
-import { getPdfDoc } from "@/components/pdf/pdf-cache";
+import { getPdfDoc, onPdfProgress } from "@/components/pdf/pdf-cache";
+import { cn } from "@/lib/utils";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
@@ -21,7 +22,7 @@ export type SourcePaper = {
   pageCount: number | null;
 };
 
-const selectCls = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+const selectCls = "h-9 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
 
 export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   const subjects = useMemo(() => {
@@ -37,7 +38,9 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<{ w: number; h: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<{ stage: "questions" | "pdf"; fraction: number | null } | null>(null);
   const [width, setWidth] = useState(600);
+  const items = useBuilder((s) => s.items);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +58,8 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
     setDoc(null);
     setSizes([]);
     setError(null);
+    setLoading({ stage: "questions", fraction: null });
+    const stop = onPdfProgress(paperId, (fraction) => !cancelled && setLoading({ stage: "pdf", fraction }));
     (async () => {
       try {
         const res = await fetch(`/api/builder/sources/${paperId}`);
@@ -63,6 +68,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
         if (cancelled) return;
         setQuestions(data.questions);
         useBuilder.getState().addToBank(data.questions);
+        setLoading({ stage: "pdf", fraction: null });
         const d = await getPdfDoc(paperId);
         const s = [];
         for (let i = 1; i <= d.numPages; i++) {
@@ -72,13 +78,18 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
         if (cancelled) return;
         setDoc(d);
         setSizes(s);
+        setLoading(null);
         ref.current?.scrollTo({ top: 0 });
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) {
+          setError((e as Error).message);
+          setLoading(null);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      stop();
     };
   }, [paperId]);
 
@@ -89,6 +100,17 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
     return [...set].sort((a, b) => a - b);
   }, [questions]);
 
+  const scaleFor = (page: number) => Math.min(1.5, width / (sizes[page]?.w ?? 595));
+  function jumpTo(q: BankQuestion) {
+    const r = q.regions[0];
+    const pageEl = r && document.getElementById(`src-page-${r.page}`);
+    const box = ref.current;
+    if (!pageEl || !box) return;
+    // Position inside the scrolling pane (offsetTop would be relative to some other ancestor).
+    const pageTop = pageEl.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    box.scrollTo({ top: pageTop + r.y0 * scaleFor(r.page) - 12, behavior: "smooth" });
+  }
+
   if (!sources.length) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
@@ -98,7 +120,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
         <div className="inline-flex rounded-lg bg-muted p-0.5 text-sm">
           {(["browse", "search"] as const).map((m) => (
@@ -130,6 +152,28 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
           ))}
         </select>}
       </div>
+      {mode === "browse" && questions && questions.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto border-b bg-background px-3 py-1.5" aria-label="Jump to a question">
+          <span className="shrink-0 pr-1 text-xs text-muted-foreground">Jump to</span>
+          {questions.map((q) => {
+            const inPaper = items.some((i) => i.questionId === q.id);
+            return (
+              <button
+                key={q.id}
+                onClick={() => jumpTo(q)}
+                title={`Q${q.number} · ${q.totalMarks} marks${inPaper ? " · in your paper" : ""}`}
+                className={cn(
+                  "shrink-0 rounded-md border px-2 py-1 text-xs tabular-nums pointer-coarse:py-1.5",
+                  inPaper ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "hover:bg-muted",
+                )}
+              >
+                Q{q.number}
+                <span className="ml-1 text-muted-foreground">{q.totalMarks}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       {mode === "search" && <SearchPane subjectId={subjectId} sources={sources} />}
       <div ref={ref} hidden={mode === "search"} className="min-h-0 flex-1 overflow-y-auto bg-zinc-200/70 px-5 py-4">
         <p className="mx-auto mb-3 max-w-2xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
@@ -137,7 +181,22 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
           question. Click again to remove. Questions are numbered in the order you pick them.
         </p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {!error && (!doc || !questions) && <p className="text-sm text-muted-foreground">Loading paper…</p>}
+        {!error && loading && (
+          <div className="mx-auto max-w-2xl space-y-4" aria-busy="true">
+            <div className="rounded-lg bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+              {loading.stage === "questions" ? "Loading questions…" : `Loading the paper${loading.fraction != null ? `… ${Math.round(loading.fraction * 100)}%` : "…"}`}
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200">
+                <div
+                  className={cn("h-full rounded-full bg-primary transition-[width]", loading.fraction == null && "w-1/3 animate-pulse")}
+                  style={loading.fraction != null ? { width: `${Math.max(5, loading.fraction * 100)}%` } : undefined}
+                />
+              </div>
+            </div>
+            {[0, 1].map((i) => (
+              <div key={i} className="aspect-[210/297] w-full animate-pulse rounded bg-white/70 shadow-sm ring-1 ring-black/5" />
+            ))}
+          </div>
+        )}
         {doc && questions &&
           pagesWithQuestions.map((i) => {
             const size = sizes[i];
@@ -146,7 +205,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
             const w = size.w * scale;
             const h = size.h * scale;
             return (
-              <div key={`${paperId}-${i}`} className="mx-auto mb-4" style={{ width: w }}>
+              <div key={`${paperId}-${i}`} id={`src-page-${i}`} className="mx-auto mb-4" style={{ width: w }}>
                 <div className="relative shadow-sm ring-1 ring-black/5" style={{ width: w, height: h }}>
                   <PdfPageCanvas doc={doc} pageIndex={i} scale={scale} width={w} height={h} />
                   <PickOverlay page={i} scale={scale} questions={questions} />

@@ -12,6 +12,7 @@ import type { ReviewData, ReviewRegion } from "@/lib/review/types";
 import { BoxOverlay, type Owner } from "./box-overlay";
 import { QuestionPanel } from "./question-panel";
 import { DetailsForm } from "./details-form";
+import { confirmDialog, toast } from "@/components/feedback";
 
 const STATUS_CLS: Record<string, string> = {
   needs_review: "bg-amber-100 text-amber-800",
@@ -36,7 +37,6 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const [data, setData] = useState(initial);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [regionId, setRegionId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const { doc, error } = usePdf(`/api/papers/${initial.paper.id}/file`);
@@ -45,10 +45,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const [pageSizes, setPageSizes] = useState<{ w: number; h: number }[]>([]);
 
   const paperId = data.paper.id;
-  const flash = (ok: boolean, text: string) => {
-    setToast({ ok, text });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const flash = (ok: boolean, text: string) => toast(text, ok ? "ok" : "error");
 
   const refresh = useCallback(async () => {
     setData(await api(`/api/admin/papers/${paperId}/review`, "GET"));
@@ -166,7 +163,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const published = data.paper.status === "published";
 
   return (
-    <div className="-my-8 ml-[calc(50%-50vw)] flex h-[calc(100vh-3.5rem)] w-screen flex-col">
+    <div className="-my-6 ml-[calc(50%-50vw)] flex h-[calc(100dvh-3.5rem-1px)] w-screen flex-col sm:-my-8">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5">
         <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">← Past papers</Link>
@@ -194,8 +191,8 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
                   ? "Questions were added, split or merged by hand, so this paper can't be re-run"
                   : "Run the parser again. Boxes and marks you edited are kept."
             }
-            onClick={() =>
-              confirm("Run the parser on this paper again? Boxes, marks and labels you edited are kept.") &&
+            onClick={async () =>
+              (await confirmDialog({ title: "Run the parser again?", body: "Boxes, marks and labels you edited by hand are kept.", confirmLabel: "Re-run" })) &&
               run(async () => {
                 await api(`/api/admin/papers/${paperId}/reprocess`, "POST");
                 for (let i = 0; i < 40; i++) {
@@ -307,13 +304,6 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
         />
       </div>
 
-      {toast && (
-        <div
-          className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${toast.ok ? "bg-zinc-900" : "bg-red-600"}`}
-        >
-          {toast.text}
-        </div>
-      )}
     </div>
   );
 }

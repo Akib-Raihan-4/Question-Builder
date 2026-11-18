@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { totalMarks } from "@/lib/builder/model";
+import { cn } from "@/lib/utils";
 import type { PaperHeader } from "@/db/schema";
 import type { BankQuestion, Item } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { BrowsePane, type SourcePaper } from "./browse-pane";
 import { PaperPane } from "./paper-pane";
+import { toast } from "@/components/feedback";
 
 type Props = {
   paper: { id: string; title: string; header: PaperHeader; items: Item[]; bank: BankQuestion[] };
@@ -31,12 +34,75 @@ export function BuilderScreen({ paper, sources }: Props) {
       // A private link that expires in a few minutes; the browser saves the file.
       window.location.assign(body.url);
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message, "error");
     } finally {
       setExporting(false);
     }
   }
   const itemCount = useBuilder((st) => st.items.length);
+  const marks = useBuilder((st) => totalMarks(st.items, st.bank));
+  const target = useBuilder((st) => st.header.targetMarks);
+
+  // Phones: one pane at a time. Tablets/desktops: side by side, with a draggable divider.
+  const [tab, setTab] = useState<"pick" | "paper">("pick");
+  const [collapsed, setCollapsed] = useState(false);
+  const [paneW, setPaneW] = useState<number | null>(null); // null = not chosen yet: use about half
+  const [splitW, setSplitW] = useState(1200);
+  const [isPhone, setIsPhone] = useState(false);
+  const splitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    try {
+      const saved = Number(localStorage.getItem("builder.paneW"));
+      if (saved >= 320) setPaneW(saved);
+      setCollapsed(localStorage.getItem("builder.collapsed") === "1");
+    } catch {
+      /* storage unavailable: defaults are fine */
+    }
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  // Track the room available so the preview never squeezes the past paper below 320px.
+  useEffect(() => {
+    const el = splitRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSplitW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const effectivePaneW = Math.round(Math.max(320, Math.min(paneW ?? splitW * 0.47, splitW - 320)));
+
+  useEffect(() => {
+    useBuilder.getState().setPreviewVisible(isPhone ? tab === "paper" : !collapsed);
+  }, [isPhone, tab, collapsed]);
+  useEffect(() => {
+    try {
+      if (paneW != null) localStorage.setItem("builder.paneW", String(Math.round(paneW)));
+      localStorage.setItem("builder.collapsed", collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [paneW, collapsed]);
+
+  function startResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const box = splitRef.current!.getBoundingClientRect();
+    const move = (ev: PointerEvent) => {
+      const w = box.right - ev.clientX;
+      setPaneW(Math.max(320, Math.min(box.width - 320, w)));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }
 
   // Load this paper into the store once.
   useEffect(() => {
@@ -90,46 +156,110 @@ export function BuilderScreen({ paper, sources }: Props) {
   }, [ready, paper.id]);
 
   return (
-    <div className="-my-8 ml-[calc(50%-50vw)] flex h-[calc(100vh-3.5rem)] w-screen flex-col">
-      <div className="flex items-center gap-3 border-b bg-background px-4 py-2 text-sm">
-        <Link href="/builder" className="text-muted-foreground hover:text-foreground">← My papers</Link>
+    <div className="-my-6 ml-[calc(50%-50vw)] flex h-[calc(100dvh-3.5rem-1px)] w-screen flex-col sm:-my-8">
+      <div className="flex items-center gap-2 border-b bg-background px-3 py-2 text-sm sm:gap-3 sm:px-4">
+        <Link href="/builder" className="shrink-0 text-muted-foreground hover:text-foreground">← <span className="hidden sm:inline">My papers</span></Link>
+        {/* Phones: switch between picking and the paper */}
+        <div className="inline-flex rounded-lg bg-muted p-0.5 md:hidden" role="tablist" aria-label="Builder view">
+          {(
+            [
+              ["pick", "Pick questions"],
+              ["paper", `My paper (${itemCount})`],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => setTab(k)}
+              className={cn("rounded-md px-2.5 py-1.5 text-sm", tab === k ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {collapsed && (
+          <button onClick={() => setCollapsed(false)} className="hidden rounded-md border px-2 py-1 text-xs hover:bg-muted md:inline-flex">
+            Show paper ({itemCount} · {marks} marks)
+          </button>
+        )}
         <div className="relative ml-auto">
           <button
             disabled={!itemCount || exporting}
             onClick={() => setMenu((m) => !m)}
-            className="inline-flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+            aria-expanded={menu}
+            className="inline-flex h-9 items-center gap-1 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50 md:h-8"
             title={itemCount ? "Download this paper" : "Add some questions first"}
           >
             {exporting ? "Exporting…" : "Export ▾"}
           </button>
           {menu && (
-            <div className="absolute right-0 z-30 mt-1 w-80 overflow-hidden rounded-lg border bg-background text-sm shadow-lg">
-              {(
-                [
-                  ["format=pdf", "PDF", "Print-ready. Sharp, exactly like the originals."],
-                  ["format=docx&mode=pictures", "Word — exact look", "Questions as pictures. Numbers, marks, header and instructions are editable."],
-                  ["format=docx&mode=editable", "Word — editable text", "Question wording is editable; diagrams and tables stay as pictures. Best for wordy papers (e.g. Physics); maths with fractions may need tidying."],
-                ] as const
-              ).map(([query, label, hint]) => (
-                <button
-                  key={query}
-                  onClick={() => {
-                    setMenu(false);
-                    void exportAs(query);
-                  }}
-                  className="block w-full px-3 py-2 text-left hover:bg-muted"
-                >
-                  <span className="font-medium">{label}</span>
-                  <span className="block text-xs text-muted-foreground">{hint}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setMenu(false)} />
+              <div className="absolute right-0 z-30 mt-1 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border bg-background text-sm shadow-lg">
+                {(
+                  [
+                    ["format=pdf", "PDF", "Print-ready. Sharp, exactly like the originals."],
+                    ["format=docx&mode=pictures", "Word — exact look", "Questions as pictures. Numbers, marks, header and instructions are editable."],
+                    ["format=docx&mode=editable", "Word — editable text", "Question wording is editable; diagrams and tables stay as pictures. Best for wordy papers (e.g. Physics); maths with fractions may need tidying."],
+                  ] as const
+                ).map(([query, label, hint]) => (
+                  <button
+                    key={query}
+                    onClick={() => {
+                      setMenu(false);
+                      void exportAs(query);
+                    }}
+                    className="block w-full px-3 py-2.5 text-left hover:bg-muted"
+                  >
+                    <span className="font-medium">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
-      <div className="flex min-h-0 flex-1">
-        {ready && <BrowsePane sources={sources} />}
-        {ready && <PaperPane saveState={saveState} />}
+
+      <div ref={splitRef} className="flex min-h-0 flex-1">
+        <div className={cn("min-h-0 min-w-0 flex-1 flex-col", tab === "pick" ? "flex" : "hidden", "md:flex")}>
+          {ready && <BrowsePane sources={sources} />}
+        </div>
+        {!collapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Drag to resize the paper preview"
+            onPointerDown={startResize}
+            className="group hidden w-2 shrink-0 cursor-col-resize touch-none items-center justify-center border-l bg-zinc-100 hover:bg-zinc-200 md:flex"
+          >
+            <span className="h-10 w-0.5 rounded bg-zinc-400 group-hover:bg-zinc-600" />
+          </div>
+        )}
+        <div
+          className={cn("min-h-0 min-w-0 flex-col", tab === "paper" ? "flex w-full" : "hidden", collapsed ? "md:hidden" : "md:flex md:shrink-0 md:w-[var(--pane-w)]")}
+          style={{ "--pane-w": `${effectivePaneW}px` } as React.CSSProperties}
+        >
+          {ready && <PaperPane saveState={saveState} onCollapse={() => setCollapsed(true)} />}
+        </div>
+      </div>
+
+      {/* Phones: always show where the paper stands */}
+      <div className="flex items-center gap-3 border-t bg-background px-4 py-2.5 md:hidden">
+        <div className="text-sm">
+          <span className="font-medium">{itemCount} question{itemCount === 1 ? "" : "s"}</span> ·{" "}
+          <span className={cn(target && marks > target && "text-red-600")}>
+            {marks}
+            {target ? `/${target}` : ""} marks
+          </span>
+        </div>
+        <button
+          onClick={() => setTab(tab === "pick" ? "paper" : "pick")}
+          className="ml-auto h-10 rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+        >
+          {tab === "pick" ? "View paper →" : "← Pick more"}
+        </button>
       </div>
     </div>
   );

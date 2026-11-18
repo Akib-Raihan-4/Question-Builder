@@ -15,7 +15,7 @@ export type Subject = { id: string; name: string; specCode: string; qualificatio
 type BulkRow = { file: string; ok: boolean; message: string };
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-base sm:text-sm pointer-coarse:h-10 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export const subjectLabel = (s: Subject) => `${s.name} · ${s.qualification} (${s.specCode})`;
 

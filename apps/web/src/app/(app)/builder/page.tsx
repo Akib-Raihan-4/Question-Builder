@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/session";
-import { NewPaperButton, DeletePaperButton, DuplicatePaperButton } from "./paper-actions";
+import { NewPaperButton } from "./paper-actions";
+import { MyPapersList } from "./my-papers-list";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,11 @@ export default async function MyPapersPage() {
                 where qp.id::text in (select jsonb_array_elements_text(i.part_ids))) end), 0)::int
         from built_paper_items i join questions q on q.id = i.question_id
         where i.built_paper_id = built_papers.id)`,
+      subjects: sql<string[]>`coalesce((
+        select array_agg(distinct s.name order by s.name)
+        from built_paper_items i join questions q on q.id = i.question_id
+        join papers p on p.id = q.paper_id join subjects s on s.id = p.subject_id
+        where i.built_paper_id = built_papers.id), '{}')`,
     })
     .from(schema.builtPapers)
     .where(eq(schema.builtPapers.ownerId, user.id))
@@ -29,33 +34,14 @@ export default async function MyPapersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">My papers</h1>
           <p className="text-muted-foreground">Build a paper by clicking questions in past papers. Numbers and totals update as you go.</p>
         </div>
         <NewPaperButton />
       </div>
-      {papers.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-          You haven&apos;t built a paper yet. Start one with <span className="font-medium text-foreground">New paper</span>.
-        </div>
-      ) : (
-        <ul className="divide-y rounded-xl border bg-background">
-          {papers.map((p) => (
-            <li key={p.id} className="flex items-center gap-4 px-4 py-3">
-              <Link href={`/builder/${p.id}`} className="min-w-0 flex-1">
-                <div className="truncate font-medium hover:underline">{p.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {p.items} question{p.items === 1 ? "" : "s"} · {p.marks} marks · edited {p.updatedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
-                </div>
-              </Link>
-              <DuplicatePaperButton id={p.id} />
-              <DeletePaperButton id={p.id} title={p.title} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <MyPapersList papers={papers.map((p) => ({ ...p, updatedAt: p.updatedAt.toISOString() }))} />
     </div>
   );
 }

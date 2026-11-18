@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SERIES } from "@/lib/paper-filename";
 import type { ReviewData } from "@/lib/review/types";
 
-const cls = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+const cls = "h-8 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
 
 /** Fix a paper's subject, code, series, year, tier and how its questions are found. */
 export function DetailsForm({ data, onSave, onCancel }: { data: ReviewData; onSave: (body: unknown) => Promise<void>; onCancel: () => void }) {

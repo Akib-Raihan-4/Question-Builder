@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { confirmDialog, toast } from "@/components/feedback";
 
 export function NewPaperButton() {
   const router = useRouter();
@@ -31,8 +32,9 @@ export function DeletePaperButton({ id, title }: { id: string; title: string }) 
       variant="ghost"
       className="text-destructive"
       onClick={async () => {
-        if (!confirm(`Delete "${title}"? This can't be undone.`)) return;
-        await fetch(`/api/built-papers/${id}`, { method: "DELETE" });
+        if (!(await confirmDialog({ title: `Delete “${title}”?`, body: "This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
+        const res = await fetch(`/api/built-papers/${id}`, { method: "DELETE" });
+        toast(res.ok ? `“${title}” deleted` : "Could not delete this paper", res.ok ? "ok" : "error");
         router.refresh();
       }}
     >
@@ -53,8 +55,11 @@ export function DuplicatePaperButton({ id }: { id: string }) {
         setBusy(true);
         const res = await fetch(`/api/built-papers/${id}/duplicate`, { method: "POST" });
         setBusy(false);
-        if (res.ok) router.refresh();
-        else alert("Could not duplicate this paper");
+        if (res.ok) {
+          toast("Copy created");
+          router.refresh();
+        }
+        else toast("Could not duplicate this paper", "error");
       }}
     >
       {busy ? "Copying…" : "Duplicate"}

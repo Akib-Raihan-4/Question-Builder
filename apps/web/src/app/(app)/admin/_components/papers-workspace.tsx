@@ -19,40 +19,50 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
   const firstWithPapers = tabs.find((s) => counts.get(s.id))?.id ?? tabs[0]?.id ?? "";
   const active = params.get("subject") ?? firstWithPapers;
   const [adding, setAdding] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const current = subjects.find((s) => s.id === active);
+  const showUpload = uploading || (counts.get(active) ?? 0) === 0;
 
   const select = (id: string) => router.replace(`/admin?subject=${id}`, { scroll: false });
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-1 border-b">
+      <div className="-mx-4 flex items-center gap-1 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Subjects">
         {tabs.map((s) => {
           const n = counts.get(s.id) ?? 0;
           return (
             <button
               key={s.id}
+              role="tab"
+              aria-selected={s.id === active}
               onClick={() => select(s.id)}
               className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-left text-sm transition-colors",
+                "-mb-px shrink-0 border-b-2 px-3 py-2 text-left text-sm transition-colors",
                 s.id === active ? "border-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
                 !n && s.id !== active && "opacity-60",
               )}
             >
               {s.name}
-              <span className="block text-[11px] font-normal text-muted-foreground">
+              <span className="block text-xs font-normal text-muted-foreground">
                 {s.qualification} · {s.specCode} · {n} paper{n === 1 ? "" : "s"}
               </span>
             </button>
           );
         })}
-        <button onClick={() => setAdding((a) => !a)} className="ml-auto rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={() => setUploading((u) => !u)} variant={showUpload ? "outline" : "default"} disabled={(counts.get(active) ?? 0) === 0}>
+          {showUpload && (counts.get(active) ?? 0) > 0 ? "Hide upload" : "Upload papers"}
+        </Button>
+        <Button variant="ghost" onClick={() => setAdding((a) => !a)}>
           {adding ? "Cancel" : "+ Add subject"}
-        </button>
+        </Button>
       </div>
 
       {adding && <AddSubject onAdded={(id) => { setAdding(false); router.refresh(); select(id); }} />}
 
-      <UploadPanel subjects={subjects} defaultSubjectId={current?.id} />
+      {showUpload && <UploadPanel subjects={subjects} defaultSubjectId={current?.id} />}
       <PapersTable rows={rows.filter((r) => r.subjectId === active)} subjectName={current ? `${current.name} (${current.qualification})` : ""} />
     </div>
   );

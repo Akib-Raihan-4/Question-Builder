@@ -42,7 +42,7 @@ export default async function TeachersPage() {
         ) : (
           <ul className="divide-y rounded-xl border bg-background">
             {pending.map((u) => (
-              <li key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <li key={u.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{u.name}</div>
                   <div className="text-sm text-muted-foreground">{u.email} · requested {fmt(u.createdAt)}</div>
@@ -56,7 +56,25 @@ export default async function TeachersPage() {
 
       <section className="space-y-2">
         <h2 className="font-medium">Active accounts ({active.length})</h2>
-        <div className="overflow-x-auto rounded-xl border bg-background">
+        <ul className="space-y-2 md:hidden">
+          {active.map((u) => (
+            <li key={u.id} className="flex items-start justify-between gap-3 rounded-xl border bg-background p-3">
+              <div className="min-w-0">
+                <div className="font-medium">
+                  {u.name}
+                  {u.id === me.id && <span className="text-muted-foreground"> (you)</span>}
+                </div>
+                <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">{u.role}</Badge>
+                  {u.papers} paper{u.papers === 1 ? "" : "s"} · approved {fmt(u.approvedAt)}
+                </div>
+              </div>
+              {u.id !== me.id && <AccountActions id={u.id} name={u.name} email={u.email} kind="active" papers={u.papers} />}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-xl border bg-background md:block">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
@@ -65,7 +83,7 @@ export default async function TeachersPage() {
                 <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 text-right font-medium">Papers built</th>
                 <th className="px-4 py-2 font-medium">Approved</th>
-                <th className="px-4 py-2" />
+                <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="divide-y">

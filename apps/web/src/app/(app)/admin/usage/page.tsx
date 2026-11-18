@@ -24,7 +24,7 @@ export default async function UsagePage() {
         <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
         <p className="text-muted-foreground">How teachers are using the question bank.</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {(
           [
             ["Papers built", stats.papers],
@@ -50,7 +50,20 @@ export default async function UsagePage() {
           {top.length === 0 ? (
             <p className="text-sm text-muted-foreground">No questions have been used yet.</p>
           ) : (
-            <table className="w-full text-sm">
+            <>
+            <ol className="divide-y md:hidden">
+              {top.map((q, i) => (
+                <li key={q.questionId} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="w-5 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                  <Link href={`/admin/papers/${q.paperId}`} className="min-w-0 flex-1 hover:underline">
+                    <span className="font-medium">Q{q.number}</span> · {q.paperCode} {q.series} {q.year}
+                    <span className="block text-xs text-muted-foreground">{q.totalMarks} marks</span>
+                  </Link>
+                  <span className="shrink-0 text-right tabular-nums">{q.uses}×</span>
+                </li>
+              ))}
+            </ol>
+            <table className="hidden w-full text-sm md:table">
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="py-1.5 font-medium">Question</th>
@@ -77,6 +90,7 @@ export default async function UsagePage() {
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </CardContent>
       </Card>

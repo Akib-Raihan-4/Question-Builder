@@ -79,3 +79,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     .returning({ id: schema.builtPapers.id });
   return rows.length ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Not found" }, { status: 404 });
 }
+
+/** Rename a paper (from the My papers list). */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const u = await apiUser();
+  if (!u.ok) return u.response;
+  const parsed = z.object({ title: z.string().trim().min(1).max(200) }).safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Give the paper a name" }, { status: 400 });
+  const rows = await db
+    .update(schema.builtPapers)
+    .set({ title: parsed.data.title, updatedAt: new Date() })
+    .where(and(eq(schema.builtPapers.id, (await params).id), eq(schema.builtPapers.ownerId, u.userId)))
+    .returning({ id: schema.builtPapers.id });
+  return rows.length ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Not found" }, { status: 404 });
+}

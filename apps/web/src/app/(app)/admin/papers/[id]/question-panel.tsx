@@ -5,6 +5,7 @@ import type { QuestionIssue } from "@/lib/review/checks";
 import type { ReviewData, ReviewQuestion } from "@/lib/review/types";
 import { cn } from "@/lib/utils";
 import type { Owner } from "./box-overlay";
+import { confirmDialog } from "@/components/feedback";
 
 type Api = (url: string, method: string, body?: unknown) => Promise<unknown>;
 type Run = (fn: () => Promise<unknown>, success?: string) => Promise<void>;
@@ -183,8 +184,8 @@ function QuestionCard({
                 {i > 0 && (
                   <button
                     disabled={busy}
-                    onClick={() =>
-                      confirm(`Start a new question at part (${p.label})? Later questions are renumbered.`) &&
+                    onClick={async () =>
+                      (await confirmDialog({ title: `Split Q${q.number} at part (${p.label})?`, body: "Part (" + p.label + ") and the parts after it become a new question. Later questions are renumbered.", confirmLabel: "Split" })) &&
                       run(() => api(`/api/admin/questions/${q.id}/split`, "POST", { partId: p.id }), "Question split")
                     }
                     className="rounded px-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -195,7 +196,7 @@ function QuestionCard({
                 )}
                 <button
                   disabled={busy}
-                  onClick={() => confirm(`Remove part (${p.label}) and its boxes?`) && run(() => api(`/api/admin/parts/${p.id}`, "DELETE"), "Part removed")}
+                  onClick={async () => (await confirmDialog({ title: `Remove part (${p.label})?`, body: "Its boxes are removed too.", confirmLabel: "Remove", danger: true })) && run(() => api(`/api/admin/parts/${p.id}`, "DELETE"), "Part removed")}
                   className="rounded px-1 text-xs text-muted-foreground hover:bg-red-50 hover:text-red-700"
                   title="Remove part"
                 >
@@ -242,8 +243,8 @@ function QuestionCard({
           {!isLast && (
             <button
               disabled={busy}
-              onClick={() =>
-                confirm(`Merge Q${q.number + 1} into Q${q.number}? Later questions are renumbered.`) &&
+              onClick={async () =>
+                (await confirmDialog({ title: `Merge Q${q.number + 1} into Q${q.number}?`, body: "Their parts and boxes are combined. Later questions are renumbered.", confirmLabel: "Merge" })) &&
                 run(() => api(`/api/admin/questions/${q.id}/merge-next`, "POST"), "Questions merged")
               }
               className="ml-auto h-7 rounded-md border px-2 text-xs hover:bg-muted"
@@ -253,8 +254,8 @@ function QuestionCard({
           )}
           <button
             disabled={busy}
-            onClick={() =>
-              confirm(`Delete Q${q.number} with its parts and boxes?`) && run(() => api(`/api/admin/questions/${q.id}`, "DELETE"), `Q${q.number} deleted`)
+            onClick={async () =>
+              (await confirmDialog({ title: `Delete Q${q.number}?`, body: "Its parts and boxes are deleted too.", confirmLabel: "Delete", danger: true })) && run(() => api(`/api/admin/questions/${q.id}`, "DELETE"), `Q${q.number} deleted`)
             }
             className={cn("h-7 rounded-md border px-2 text-xs text-red-700 hover:bg-red-50", isLast && "ml-auto")}
           >

@@ -161,7 +161,7 @@ export function BoxOverlay({
           >
             <span
               className={cn(
-                "pointer-events-none absolute rounded-sm px-1 text-[10px] font-semibold leading-4 text-white",
+                "pointer-events-none absolute rounded-sm px-1 text-xs font-semibold leading-4 text-white",
                 isPart ? "right-0 top-0 bg-violet-600" : low ? "-top-4 left-0 bg-orange-500" : "-top-4 left-0 bg-blue-600",
               )}
             >

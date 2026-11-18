@@ -20,6 +20,9 @@ type State = {
   move: (from: number, to: number) => void;
   setTitle: (title: string) => void;
   setHeader: (patch: Partial<PaperHeader>) => void;
+  /** Whether the paper preview is on screen (not on a phone's "Pick" tab, not collapsed). */
+  previewVisible: boolean;
+  setPreviewVisible: (v: boolean) => void;
 };
 
 export const useBuilder = create<State>((set) => {
@@ -32,6 +35,8 @@ export const useBuilder = create<State>((set) => {
     items: [],
     bank: {},
     version: 0,
+    previewVisible: true,
+    setPreviewVisible: (previewVisible) => set({ previewVisible }),
     load: (d) => set({ title: d.title, header: d.header, items: d.items, version: 0 }),
     addToBank: (qs) => set((s) => ({ bank: { ...s.bank, ...Object.fromEntries(qs.map((q) => [q.id, q])) } })),
     addQuestion: (q) => edit((s) => ({ items: m.addQuestion(s.items, q), bank: withBank(s, q) })),

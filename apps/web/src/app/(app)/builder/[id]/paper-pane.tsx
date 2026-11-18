@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CropCanvas } from "@/components/pdf/crop-canvas";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const A4_W = 595.28;
 
-export function PaperPane({ saveState }: { saveState: string }) {
+export function PaperPane({ saveState, onCollapse }: { saveState: string; onCollapse?: () => void }) {
   const items = useBuilder((s) => s.items);
   const bank = useBuilder((s) => s.bank);
   const header = useBuilder((s) => s.header);
@@ -25,7 +25,9 @@ export function PaperPane({ saveState }: { saveState: string }) {
   const total = totalMarks(items, bank);
   const target = header.targetMarks;
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    // Mouse: drag after moving 4px. Touch: press and hold briefly, so scrolling still works.
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -53,7 +55,7 @@ export function PaperPane({ saveState }: { saveState: string }) {
   }
 
   return (
-    <aside className="flex w-[min(48vw,660px)] shrink-0 flex-col border-l bg-background">
+    <aside className="flex h-full min-h-0 w-full flex-col bg-background" aria-label="Your paper">
       <div className="space-y-2 border-b px-4 py-2.5">
         <div className="flex items-center gap-2">
           <input
@@ -62,7 +64,16 @@ export function PaperPane({ saveState }: { saveState: string }) {
             className="min-w-0 flex-1 rounded-md px-1 text-base font-semibold outline-none hover:bg-muted focus:bg-muted"
             aria-label="Paper name"
           />
-          <span className="shrink-0 text-xs text-muted-foreground">{saveState}</span>
+          <span className="shrink-0 text-xs text-muted-foreground" aria-live="polite">{saveState}</span>
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              className="hidden rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:inline"
+              title="Hide the preview to give the past paper more room"
+            >
+              Hide ▸
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="font-medium">
@@ -212,10 +223,10 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
       ref={setNodeRef}
       id={`item-${item.questionId}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group relative scroll-mt-2 border-b border-dashed border-zinc-200 pb-3 pt-4", isDragging && "z-10 bg-white shadow-lg")}
+      className={cn("group relative scroll-mt-2 border-b border-dashed border-zinc-200 pb-3 pt-2", isDragging && "z-10 bg-white shadow-lg")}
     >
-      <div className="absolute right-2 top-1 flex items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
-        <span className="text-[11px] text-muted-foreground">
+      <div className="mb-1 flex items-center gap-1 px-2 opacity-70 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100">
+        <span className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
           {q.paperLabel} · Q{q.number}
           {parts.length ? parts.map((p) => `(${p.label})`).join("") : ""}
         </span>
@@ -223,7 +234,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab rounded px-1.5 text-sm text-zinc-500 hover:bg-zinc-100 active:cursor-grabbing"
+          className="cursor-grab touch-manipulation rounded px-1.5 py-1 text-sm text-zinc-500 hover:bg-zinc-100 active:cursor-grabbing pointer-coarse:px-2.5"
           aria-label={`Drag question ${number} to reorder`}
           title="Drag to reorder"
         >
@@ -239,7 +250,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
         </button>
       </div>
       {warnings.map((w) => (
-        <p key={w} className="mx-6 mb-1 mt-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">⚠ {w}</p>
+        <p key={w} className="mx-6 mb-1 mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">⚠ {w}</p>
       ))}
       <div className="flex">
         <div className="shrink-0 pt-1 text-right text-[15px] font-bold" style={{ width: numberColW, paddingRight: 6 }}>
@@ -275,7 +286,7 @@ function MoveControls({ index, count }: { index: number; count: number }) {
         title="Move to position"
         value={index}
         onChange={(e) => move(index, Number(e.target.value))}
-        className="h-6 rounded border border-zinc-200 bg-white px-0.5 text-[11px] text-zinc-600"
+        className="h-6 rounded border border-zinc-200 bg-white px-0.5 text-xs text-zinc-600"
       >
         {Array.from({ length: count }, (_, i) => (
           <option key={i} value={i}>
@@ -306,7 +317,7 @@ function OutlineRow({ item, index, count, onOpen }: { item: Item; index: number;
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab rounded px-1 text-zinc-400 hover:bg-zinc-100 active:cursor-grabbing"
+        className="cursor-grab touch-manipulation rounded px-1 py-1 text-zinc-400 hover:bg-zinc-100 active:cursor-grabbing pointer-coarse:px-2.5"
         aria-label={`Drag question ${index + 1}`}
         title="Drag to reorder"
       >

@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { CropCanvas } from "@/components/pdf/crop-canvas";
 import type { SearchHit } from "@/lib/builder/search";
 import { useBuilder } from "@/lib/builder/store";
+import { pickPart, pickQuestion, unpickPart, unpickQuestion } from "@/lib/builder/actions";
 import { cn } from "@/lib/utils";
 import type { SourcePaper } from "./browse-pane";
 
-const field = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+const field = "h-9 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
 const PAGE = 20;
 
 type Filters = {
@@ -137,7 +138,6 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
 function HitCard({ hit, width }: { hit: SearchHit; width: number }) {
   const item = useBuilder((s) => s.items.find((i) => i.questionId === hit.id));
   const serial = useBuilder((s) => s.items.findIndex((i) => i.questionId === hit.id) + 1);
-  const { addQuestion, addPart, removePart, removeItem } = useBuilder.getState();
   const [expanded, setExpanded] = useState(false);
   const whole = item && item.partIds.length === 0;
   const scale = Math.min(0.75, (width - 24) / 500);
@@ -156,7 +156,7 @@ function HitCard({ hit, width }: { hit: SearchHit; width: number }) {
             return (
               <button
                 key={p.id}
-                onClick={() => (picked ? removePart(hit, p.id) : addPart(hit, p.id))}
+                onClick={() => (picked ? unpickPart(hit, p.id) : pickPart(hit, p.id))}
                 title={picked ? `Remove part (${p.label})` : `Add only part (${p.label}), ${p.marks} mark${p.marks === 1 ? "" : "s"}`}
                 className={cn("rounded px-1.5 py-0.5 text-xs", picked ? "bg-emerald-600 text-white" : "bg-violet-50 text-violet-900 hover:bg-violet-100")}
               >
@@ -165,7 +165,7 @@ function HitCard({ hit, width }: { hit: SearchHit; width: number }) {
             );
           })}
           <button
-            onClick={() => (whole ? removeItem(hit.id) : addQuestion(hit))}
+            onClick={() => (whole ? unpickQuestion(hit) : pickQuestion(hit))}
             className={cn(
               "rounded-md px-2 py-1 text-xs font-medium",
               whole ? "bg-emerald-600 text-white hover:bg-red-600" : "bg-primary text-primary-foreground hover:bg-primary/80",
