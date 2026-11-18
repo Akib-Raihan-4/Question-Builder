@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/feedback";
 import { DeletePaperButton, DuplicatePaperButton } from "./paper-actions";
+import { EmptyState } from "@/components/empty-state";
 
 type Paper = { id: string; title: string; updatedAt: string; items: number; marks: number; subjects: string[] };
 
@@ -17,9 +18,9 @@ export function MyPapersList({ papers }: { papers: Paper[] }) {
 
   if (papers.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-        You haven&apos;t built a paper yet. Start one with <span className="font-medium text-foreground">New paper</span>.
-      </div>
+      <EmptyState title="You haven’t built a paper yet">
+        Press <span className="font-medium text-foreground">New paper</span>, then click questions in past papers to add them.
+      </EmptyState>
     );
   }
 

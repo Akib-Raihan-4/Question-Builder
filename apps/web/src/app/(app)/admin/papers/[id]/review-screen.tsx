@@ -187,28 +187,55 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   }
 
   const published = data.paper.status === "published";
+  const pagePicker =
+    pageSizes.length > 0 ? (
+      <select
+                  aria-label="Go to page"
+                  defaultValue=""
+                  onChange={(e) => {
+                    goToPage(Number(e.target.value));
+                    e.target.value = "";
+                  }}
+                  className="h-8 w-24 rounded-md border bg-background px-1.5 text-base sm:text-sm pointer-coarse:h-9"
+                >
+                  <option value="" disabled>
+                    Page…
+                  </option>
+                  {pageSizes.map((_, i) => (
+                    <option key={i} value={i}>
+                      Page {i + 1}
+                      {data.regions.some((r) => r.page === i) ? "" : " (no boxes)"}
+                    </option>
+                  ))}
+                </select>
+    ) : null;
 
   return (
     <div className="-my-6 ml-[calc(50%-50vw)] flex h-[calc(100dvh-3.5rem-1px)] w-screen flex-col sm:-my-8">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5">
-        <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">← Past papers</Link>
-        <div className="min-w-0">
-          <div className="truncate font-semibold">{data.paper.paperCode} · {data.paper.series} {data.paper.year}</div>
-          <div className="text-xs text-muted-foreground">
-            {data.paper.subject} · {data.questions.length} questions ·{" "}
-            {data.questions.reduce((s, q) => s + q.totalMarks, 0)} marks · parser {data.paper.parserVersion ?? "–"}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2 sm:px-4 sm:py-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-none">
+          <Link href="/admin" className="shrink-0 text-sm text-muted-foreground hover:text-foreground">
+            ←<span className="sr-only sm:not-sr-only"> Past papers</span>
+          </Link>
+          <div className="min-w-0">
+            <div className="truncate font-semibold">{data.paper.paperCode} · {data.paper.series} {data.paper.year}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {data.paper.subject} · {data.questions.length} questions · {data.questions.reduce((s, q) => s + q.totalMarks, 0)} marks
+              <span className="hidden sm:inline"> · parser {data.paper.parserVersion ?? "–"}</span>
+            </div>
           </div>
+          <Badge className={cn("shrink-0", STATUS_CLS[data.paper.status])}>{data.paper.status.replace("_", " ")}</Badge>
         </div>
-        <Badge className={STATUS_CLS[data.paper.status]}>{data.paper.status.replace("_", " ")}</Badge>
-        <Button size="sm" variant="ghost" onClick={() => setEditing((e) => !e)}>{editing ? "Close details" : "Edit details"}</Button>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 md:ml-auto md:w-auto">
+          <Button size="sm" variant="ghost" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>{editing ? "Close details" : "Edit details"}</Button>
           {issues.length > 0 && !published && (
-            <span className="text-xs text-amber-700">{issues.length} thing{issues.length === 1 ? "" : "s"} to fix before publishing</span>
+            <span className="ml-auto text-xs text-amber-700 md:ml-0">{issues.length} thing{issues.length === 1 ? "" : "s"} to fix before publishing</span>
           )}
           <Button
             size="sm"
             variant="outline"
+            className={cn(!(issues.length > 0 && !published) && "ml-auto md:ml-0")}
             disabled={busy || data.paper.structureEdited || data.paper.parserKey === "manual"}
             title={
               data.paper.parserKey === "manual"
@@ -229,7 +256,8 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
               }, "Parser re-run finished")
             }
           >
-            Re-run parser
+            <span className="sm:hidden">Re-run</span>
+            <span className="hidden sm:inline">Re-run parser</span>
           </Button>
           {published ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => api(`/api/admin/papers/${paperId}/publish`, "POST", { publish: false }), "Unpublished")}>
@@ -288,7 +316,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             </button>
           ))}
         </div>
-        <span className="text-xs text-muted-foreground">Easiest on a tablet or computer.</span>
+        <div className="ml-auto">{pagePicker}</div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -298,10 +326,11 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             <span className="min-w-0 truncate text-xs text-muted-foreground">
               {owner ? (
                 <>
-                  Selected: <span className="font-medium text-foreground">{labels[owner.id]}</span>
+                  <span className="hidden lg:inline">Selected: </span>
+                  <span className="font-medium text-foreground">{labels[owner.id]}</span>
                 </>
               ) : (
-                "Select a question or part"
+                <span className="hidden lg:inline">Select a question or part</span>
               )}
             </span>
             <Button
@@ -312,7 +341,13 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
               onClick={() => setDrawMode((d) => !d)}
               title={owner ? "Then drag on the page to draw a box (Shift + drag also works)" : "Select a question or part first"}
             >
-              {drawMode ? "Drawing… (tap to cancel)" : "Draw box"}
+              {drawMode ? (
+                <>
+                  Drawing…<span className="hidden sm:inline"> (tap to cancel)</span>
+                </>
+              ) : (
+                "Draw box"
+              )}
             </Button>
             <Button size="sm" variant="outline" disabled={!regionId || busy} onClick={deleteSelectedBox} className="text-destructive">
               Delete box
@@ -327,35 +362,17 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
               <Button size="sm" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))}>
                 +
               </Button>
-              {pageSizes.length > 0 && (
-                <select
-                  aria-label="Go to page"
-                  defaultValue=""
-                  onChange={(e) => {
-                    goToPage(Number(e.target.value));
-                    e.target.value = "";
-                  }}
-                  className="h-8 rounded-md border bg-background px-1.5 text-base sm:text-sm pointer-coarse:h-9"
-                >
-                  <option value="" disabled>
-                    Page…
-                  </option>
-                  {pageSizes.map((_, i) => (
-                    <option key={i} value={i}>
-                      Page {i + 1}
-                      {data.regions.some((r) => r.page === i) ? "" : " (no boxes)"}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <div className="hidden md:block">{pagePicker}</div>
             </div>
           </div>
         <div ref={viewerRef} className="relative min-h-0 flex-1 overflow-auto bg-zinc-200/70 px-3 py-4 sm:px-6 sm:py-6">
-          <p className="mx-auto mb-4 max-w-3xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
+          <details key={String(isPhone)} open={!isPhone} className="mx-auto mb-4 max-w-3xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground">How to edit boxes</summary>
+            <span className="mt-1 block md:hidden">Easiest on a tablet or computer.</span>
             Tap or click a box to select it, then drag to move it or drag its handles to resize. To add a box, select a question or part and press{" "}
             <span className="font-medium text-foreground">Draw box</span> (or hold <kbd className="rounded border px-1">Shift</kbd>) and drag on the page.
             Boxes marked ✎ were edited by hand and are kept when the parser re-runs.
-          </p>
+          </details>
           {error && <p className="text-sm text-destructive">Could not load the PDF: {error}</p>}
           {!doc && !error && <p className="text-sm text-muted-foreground">Loading PDF…</p>}
           {doc &&

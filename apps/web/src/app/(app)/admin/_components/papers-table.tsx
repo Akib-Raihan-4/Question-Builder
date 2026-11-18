@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { confirmDialog, toast } from "@/components/feedback";
+import { EmptyState } from "@/components/empty-state";
 
 export type PaperRow = {
   id: string;
@@ -63,9 +64,9 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-        No {subjectName ? `${subjectName} ` : ""}papers yet. Use <span className="font-medium text-foreground">Upload papers</span> to add one.
-      </div>
+      <EmptyState title={`No ${subjectName ? `${subjectName} ` : ""}papers yet`}>
+        Use <span className="font-medium text-foreground">Upload papers</span> to add one.
+      </EmptyState>
     );
   }
 

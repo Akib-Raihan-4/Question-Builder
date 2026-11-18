@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/session";
 import { Badge } from "@/components/ui/badge";
 import { AccountActions } from "./account-actions";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -28,17 +30,15 @@ export default async function TeachersPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Teachers</h1>
-        <p className="text-muted-foreground">
-          Teachers can request an account from the sign-in page. Approve the ones you know; rejecting deletes the account.
-        </p>
-      </div>
+      <PageHeader
+        title="Teachers"
+        description="Teachers can request an account from the sign-in page. Approve the ones you know; rejecting deletes the account."
+      />
 
       <section className="space-y-2">
         <h2 className="font-medium">Waiting for approval {pending.length > 0 && <Badge className="ml-1 bg-amber-100 text-amber-900">{pending.length}</Badge>}</h2>
         {pending.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No account requests right now.</p>
+          <EmptyState title="No account requests right now" className="py-6">New sign-ups appear here for you to approve.</EmptyState>
         ) : (
           <ul className="divide-y rounded-xl border bg-background">
             {pending.map((u) => (

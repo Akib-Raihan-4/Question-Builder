@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { requireUser } from "@/lib/session";
 import { mostUsedQuestions } from "@/lib/builder/search";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,7 @@ export default async function UsagePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
-        <p className="text-muted-foreground">How teachers are using the question bank.</p>
-      </div>
+      <PageHeader title="Usage" description="How teachers are using the question bank." />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {(
           [

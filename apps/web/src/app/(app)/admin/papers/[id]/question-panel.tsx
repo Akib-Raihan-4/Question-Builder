@@ -234,6 +234,7 @@ function QuestionCard({
                   onClick={async () => (await confirmDialog({ title: `Remove part (${p.label})?`, body: "Its boxes are removed too.", confirmLabel: "Remove", danger: true })) && run(() => api(`/api/admin/parts/${p.id}`, "DELETE"), "Part removed")}
                   className="rounded px-1 text-xs text-muted-foreground hover:bg-red-50 hover:text-red-700"
                   title="Remove part"
+                  aria-label={`Remove part (${p.label})`}
                 >
                   ✕
                 </button>
@@ -271,8 +272,8 @@ function QuestionCard({
               });
             }}
           >
-            <input placeholder="label" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} className="h-7 w-14 rounded-md border px-1.5 text-xs" />
-            <input placeholder="marks" value={newMarks} onChange={(e) => setNewMarks(e.target.value.replace(/\D/g, ""))} className="h-7 w-14 rounded-md border px-1.5 text-xs" />
+            <input aria-label="New part label" placeholder="label" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} className="h-7 w-14 rounded-md border px-1.5 text-xs" />
+            <input aria-label="New part marks" placeholder="marks" value={newMarks} onChange={(e) => setNewMarks(e.target.value.replace(/\D/g, ""))} className="h-7 w-14 rounded-md border px-1.5 text-xs" />
             <button disabled={busy} className="h-7 rounded-md border px-2 text-xs hover:bg-muted">Add part</button>
           </form>
           {!isLast && (

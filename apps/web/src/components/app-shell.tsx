@@ -27,6 +27,12 @@ export function AppShell({
   ];
   return (
     <div className="min-h-screen">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm font-medium shadow focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href="/" className="shrink-0"><Logo /></Link>
@@ -39,7 +45,7 @@ export function AppShell({
           <MobileMenu items={items} user={user} role={role} />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">{children}</main>
+      <main id="main" tabIndex={-1} className="mx-auto outline-none max-w-6xl px-4 py-6 sm:py-8">{children}</main>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/session";
 import { Suspense } from "react";
 import { PapersWorkspace } from "./_components/papers-workspace";
+import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -42,13 +43,10 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Past papers</h1>
-        <p className="text-muted-foreground">
-          Upload question papers. Edexcel layouts are split into questions automatically; anything else you mark by hand.
-          Every paper waits for your review before teachers can use it.
-        </p>
-      </div>
+      <PageHeader
+        title="Past papers"
+        description="Upload question papers. Edexcel layouts are split into questions automatically; anything else you mark by hand. Every paper waits for your review before teachers can use it."
+      />
       <Suspense>
         <PapersWorkspace subjects={subjects} rows={rows} />
       </Suspense>

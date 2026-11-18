@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/session";
 import { NewPaperButton } from "./paper-actions";
 import { MyPapersList } from "./my-papers-list";
+import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +35,11 @@ export default async function MyPapersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My papers</h1>
-          <p className="text-muted-foreground">Build a paper by clicking questions in past papers. Numbers and totals update as you go.</p>
-        </div>
-        <NewPaperButton />
-      </div>
+      <PageHeader
+        title="My papers"
+        description="Build a paper by clicking questions in past papers. Numbers and totals update as you go."
+        actions={<NewPaperButton />}
+      />
       <MyPapersList papers={papers.map((p) => ({ ...p, updatedAt: p.updatedAt.toISOString() }))} />
     </div>
   );
