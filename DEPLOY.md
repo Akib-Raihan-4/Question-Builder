@@ -69,6 +69,25 @@ wakes up. A paid instance (or Railway/Fly) avoids this.
 3. **My papers** → New paper → add a question → **Export ▾ → PDF** and **Word** both download.
 4. Sign out → **Create an account** → the request appears under **Teachers**.
 
+## Test environment (local development)
+
+Local development uses its own database and bucket, so nothing done on your computer touches
+real data:
+
+| | Local / test | Production (Vercel) |
+|---|---|---|
+| Database | Neon **branch** of production | Neon main branch |
+| Bucket | `question-builder-test` (its own key, scoped to that bucket) | `question-builder` |
+| Settings | `.env.local` | Vercel → Environment Variables → Production |
+
+Same variable names in both places (`DATABASE_URL`, `S3_BUCKET`, …) — only the values differ.
+A database and its bucket always go together: each paper row points at a file in *its* bucket.
+
+**Refreshing test from production:** reset the Neon branch from its parent in the Neon console,
+then copy any new paper PDFs (`papers/<id>.pdf`) from the production bucket into the test bucket
+(the files a branch's paper rows point at must exist in the test bucket, or those papers won't open).
+To let Vercel *preview* deploys use test too, add the test values under Environment Variables → Preview.
+
 ## Running locally (unchanged)
 
 ```bash
