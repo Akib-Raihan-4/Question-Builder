@@ -38,7 +38,9 @@ export function AppShell({
           <Link href="/" className="shrink-0"><Logo /></Link>
           <NavLinks items={items} className="hidden lg:flex" />
           <div className="ml-auto hidden items-center gap-3 text-sm lg:flex">
-            <span className="max-w-40 truncate text-muted-foreground" title={user.email}>{user.name}</span>
+            <Link href="/account" className="max-w-40 truncate text-muted-foreground hover:text-foreground hover:underline" title={`${user.email} · account and password`}>
+              {user.name}
+            </Link>
             <Badge variant="secondary">{role}</Badge>
             <SignOutButton />
           </div>

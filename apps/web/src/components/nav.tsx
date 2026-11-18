@@ -98,6 +98,9 @@ export function MobileMenu({ items, user, role }: { items: NavItem[]; user: { na
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{user.name}</div>
                 <div className="truncate text-xs text-muted-foreground">{user.email} · {role}</div>
+                <Link href="/account" className="mt-1 inline-block text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                  Account &amp; password
+                </Link>
               </div>
               <SignOutButton />
             </div>

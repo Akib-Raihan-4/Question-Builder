@@ -5,6 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 
 export function SignupForm() {
@@ -53,12 +54,12 @@ export function SignupForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" autoComplete="new-password" required minLength={8} />
+            <PasswordInput id="password" name="password" autoComplete="new-password" required minLength={8} />
             <p className="text-xs text-muted-foreground">At least 8 characters.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm">Confirm password</Label>
-            <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required minLength={8} />
+            <PasswordInput id="confirm" name="confirm" autoComplete="new-password" required minLength={8} />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={pending}>

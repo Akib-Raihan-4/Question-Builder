@@ -15,7 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="text-center">
           <Logo className="text-xl" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Build exam papers from Edexcel International GCSE past papers.
+            Build exam papers from Edexcel past papers.
           </p>
         </div>
         {pending && (

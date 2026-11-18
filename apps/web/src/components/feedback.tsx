@@ -18,6 +18,10 @@ type ConfirmOptions = {
   cancelLabel?: string;
   /** Red confirm button, for deleting things. */
   danger?: boolean;
+  /** Extra content under the text (e.g. a value to copy). */
+  content?: React.ReactNode;
+  /** Only an OK button: a message, not a question. */
+  hideCancel?: boolean;
 };
 type ConfirmState = ConfirmOptions & { resolve: (ok: boolean) => void };
 
@@ -103,14 +107,17 @@ export function FeedbackHost() {
           >
             <h2 id="confirm-title" className="text-base font-semibold">{dialog.title}</h2>
             {dialog.body && <p id="confirm-body" className="mt-1.5 text-sm text-muted-foreground">{dialog.body}</p>}
+            {dialog.content && <div className="mt-3">{dialog.content}</div>}
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => close(false)}
-                className="h-10 rounded-lg border px-4 text-sm hover:bg-muted sm:h-9"
-              >
-                {dialog.cancelLabel ?? "Cancel"}
-              </button>
+              {!dialog.hideCancel && (
+                <button
+                  type="button"
+                  onClick={() => close(false)}
+                  className="h-10 rounded-lg border px-4 text-sm hover:bg-muted sm:h-9"
+                >
+                  {dialog.cancelLabel ?? "Cancel"}
+                </button>
+              )}
               <button
                 ref={confirmRef}
                 type="button"

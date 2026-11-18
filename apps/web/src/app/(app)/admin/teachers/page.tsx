@@ -70,7 +70,7 @@ export default async function TeachersPage() {
                   {u.papers} paper{u.papers === 1 ? "" : "s"} · approved {fmt(u.approvedAt)}
                 </div>
               </div>
-              {u.id !== me.id && <AccountActions id={u.id} name={u.name} email={u.email} kind="active" papers={u.papers} />}
+              {u.id !== me.id && <AccountActions id={u.id} name={u.name} email={u.email} kind="active" papers={u.papers} role={u.role} />}
             </li>
           ))}
         </ul>
@@ -95,7 +95,7 @@ export default async function TeachersPage() {
                   <td className="px-4 py-2.5 text-right tabular-nums">{u.papers}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{fmt(u.approvedAt)}</td>
                   <td className="px-4 py-2.5 text-right">
-                    {u.id !== me.id && <AccountActions id={u.id} name={u.name} email={u.email} kind="active" papers={u.papers} />}
+                    {u.id !== me.id && <AccountActions id={u.id} name={u.name} email={u.email} kind="active" papers={u.papers} role={u.role} />}
                   </td>
                 </tr>
               ))}
