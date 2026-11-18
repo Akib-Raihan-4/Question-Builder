@@ -52,6 +52,8 @@ wakes up. A paid instance (or Railway/Fly) avoids this.
    | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | same as local |
    | `PROCESSOR_URL` | `https://<your-service>.onrender.com` |
    | `PROCESSOR_KEY` | the key from step 1 |
+   | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | optional: the Gmail account that sends emails, and its app password |
+   | `ADMIN_EMAIL` | optional: who is told about new sign-ups (comma-separated); default is every admin account |
 
 4. **Deploy.** Open the site and sign in with your admin account — the data is already in Neon.
 5. If you later add a custom domain, change `BETTER_AUTH_URL` to it and redeploy.
@@ -101,3 +103,18 @@ npm run dev         # terminal 2
   school uses the app; otherwise use Vercel Pro.
 - Plan limits (function time, body size) change over time; check Vercel's current limits page if
   uploads or exports start failing.
+
+## Email (optional)
+
+With `GMAIL_USER` and `GMAIL_APP_PASSWORD` set, the app emails:
+
+- a **Forgot password?** link (works for one hour; using it signs out every device),
+- `ADMIN_EMAIL` (or every admin) when a teacher asks for an account,
+- the teacher when you approve them.
+
+Without them nothing is emailed and everything else still works; the admin can still set a
+temporary password from **Teachers → Reset password**.
+
+The app password comes from Google Account → Security → 2-Step Verification → App passwords
+(2-Step Verification must be on). Gmail allows about 500 emails a day. Links in emails use
+`BETTER_AUTH_URL`, so it must be the public address on Vercel.

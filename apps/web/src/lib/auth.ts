@@ -4,6 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { adminRecipients, sendEmail, siteUrl } from "./email";
 
 /**
  * Only the site's origin is used from BETTER_AUTH_URL. If it carried a path (e.g. pasted as
@@ -46,6 +47,37 @@ export const auth = betterAuth({
     disableSignUp: false,
     autoSignIn: false,
     minPasswordLength: 8,
+    // "Forgot password?" emails a link that works for an hour; using it signs out every device.
+    resetPasswordTokenExpiresIn: 60 * 60,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your Papersmith password",
+        lines: [
+          `Hi ${user.name},`,
+          "Someone (hopefully you) asked to reset the password for your Papersmith account. The link works for one hour.",
+          "If it wasn't you, ignore this email — your password stays the same.",
+        ],
+        button: { label: "Choose a new password", url },
+      });
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        // Tell the admin(s) a teacher is waiting for approval.
+        after: async (user) => {
+          if ((user as { status?: string }).status !== "pending") return;
+          await sendEmail({
+            to: await adminRecipients(),
+            subject: `New teacher waiting for approval: ${user.name}`,
+            lines: [`${user.name} (${user.email}) asked for a Papersmith account.`, "Approve or reject it on the Teachers page."],
+            button: { label: "Open Teachers", url: siteUrl("/admin/teachers") },
+          });
+        },
+      },
+    },
   },
   user: {
     additionalFields: {

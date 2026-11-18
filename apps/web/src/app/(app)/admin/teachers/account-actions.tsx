@@ -27,12 +27,9 @@ export function AccountActions({
     setBusy(true);
     const res = await fetch(url, { method });
     setBusy(false);
-    if (!res.ok)
-      toast(
-        (await res.json().catch(() => ({}))).error ?? "Something went wrong",
-        "error",
-      );
-    else if (url.endsWith("/approve")) toast(`${name} can now sign in`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) toast(body.error ?? "Something went wrong", "error");
+    else if (url.endsWith("/approve")) toast(`${name} can now sign in${body.emailed ? " — we emailed them" : ""}`);
     else toast(`${name}'s account was deleted`);
     router.refresh();
   }

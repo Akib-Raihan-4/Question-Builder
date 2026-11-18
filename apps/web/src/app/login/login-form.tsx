@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -40,7 +41,11 @@ export function LoginForm() {
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <PasswordInput id="password" name="password" autoComplete="current-password" required />
-            <p className="text-xs text-muted-foreground">Forgot it? Ask your admin to set a temporary password for you.</p>
+            <p className="text-xs">
+              <Link href="/forgot-password" className="text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                Forgot your password?
+              </Link>
+            </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={pending}>
