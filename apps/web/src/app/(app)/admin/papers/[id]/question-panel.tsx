@@ -62,7 +62,7 @@ export function QuestionPanel({
   const shown = data.questions.filter((q) => filter === "all" || issues.some((i) => i.questionId === q.id));
 
   return (
-    <aside className="flex w-[380px] shrink-0 flex-col border-l bg-background">
+    <aside className="flex h-full min-h-0 w-full flex-col border-l bg-background" aria-label="Questions">
       <div className="flex items-center gap-2 border-b px-3 py-2 text-sm">
         {(["all", "issues"] as const).map((f) => (
           <button
@@ -73,6 +73,23 @@ export function QuestionPanel({
             {f === "all" ? `All (${data.questions.length})` : `To fix (${new Set(issues.map((i) => i.questionId)).size})`}
           </button>
         ))}
+        {issues.some((i) => i.questionId) && (
+          <button
+            onClick={() => {
+              const order = data.questions.map((q) => q.id);
+              const toFix = order.filter((id) => issues.some((i) => i.questionId === id));
+              const at = selectedQuestionId ? order.indexOf(selectedQuestionId) : -1;
+              const next = toFix.find((id) => order.indexOf(id) > at) ?? toFix[0];
+              if (next) {
+                onSelect({ type: "question", id: next });
+                requestAnimationFrame(() => document.getElementById(`card-${next}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+              }
+            }}
+            className="ml-auto rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-200"
+          >
+            Next to fix →
+          </button>
+        )}
       </div>
       <AddQuestion data={data} busy={busy} run={run} api={api} />
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
@@ -141,7 +158,7 @@ function QuestionCard({
             "rounded-md px-1.5 py-0.5 font-semibold",
             owner?.id === q.id ? "bg-blue-600 text-white" : "hover:bg-muted",
           )}
-          title="Select this question (then Shift+drag on the page to draw a box)"
+          title="Select this question (then press Draw box and drag on the page to add a box)"
         >
           Q{q.number}
         </button>
@@ -160,6 +177,24 @@ function QuestionCard({
         </label>
       </div>
 
+      {!selected ? (
+        // Folded: one line that says what's in the question and whether anything needs fixing.
+        <button
+          onClick={() => onSelect({ type: "question", id: q.id })}
+          className="mt-1 flex w-full items-center gap-2 text-left text-xs text-muted-foreground"
+          aria-label={`Open Q${q.number}`}
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {parts.length ? parts.map((p) => `(${p.label}) ${p.marks}`).join(" · ") : "No parts"}
+          </span>
+          {issues.length > 0 && (
+            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
+              {issues.length} to fix
+            </span>
+          )}
+          <span aria-hidden className="shrink-0">▾</span>
+        </button>
+      ) : (<>
       {q.warnings.length > 0 && (
         <ul className="mt-1.5 space-y-0.5 text-xs text-orange-700">
           {q.warnings.map((w) => <li key={w}>• {w}</li>)}
@@ -230,7 +265,7 @@ function QuestionCard({
               e.preventDefault();
               const marks = Number(newMarks);
               if (!newLabel.trim() || !Number.isInteger(marks)) return;
-              run(() => api(`/api/admin/questions/${q.id}/parts`, "POST", { label: newLabel.trim(), marks }), "Part added — select it and Shift+drag to draw its box").then(() => {
+              run(() => api(`/api/admin/questions/${q.id}/parts`, "POST", { label: newLabel.trim(), marks }), "Part added — select it, press Draw box and drag on the page").then(() => {
                 setNewLabel("");
                 setNewMarks("");
               });
@@ -263,11 +298,12 @@ function QuestionCard({
           </button>
         </div>
       )}
+      </>)}
     </div>
   );
 }
 
-/** Add a question by hand; then select it and Shift+drag on the page to draw its box. */
+/** Add a question by hand; then select it, press Draw box (or hold Shift) and drag on the page. */
 function AddQuestion({ data, busy, run, api }: { data: ReviewData; busy: boolean; run: Run; api: Api }) {
   const next = Math.max(0, ...data.questions.map((q) => q.number)) + 1;
   const [number, setNumber] = useState("");
@@ -280,7 +316,7 @@ function AddQuestion({ data, busy, run, api }: { data: ReviewData; busy: boolean
         if (!marks) return;
         void run(
           () => api(`/api/admin/papers/${data.paper.id}/questions`, "POST", { number: Number(number || next), totalMarks: Number(marks) }),
-          `Q${number || next} added — select it and Shift+drag on the page to draw its box`,
+          `Q${number || next} added — select it, press Draw box and drag on the page`,
         ).then(() => {
           setNumber("");
           setMarks("");

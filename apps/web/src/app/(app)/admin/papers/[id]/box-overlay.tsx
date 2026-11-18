@@ -41,6 +41,7 @@ export function BoxOverlay({
   onChange,
   onCommit,
   onDraw,
+  drawMode = false,
 }: {
   page: number;
   scale: number;
@@ -55,6 +56,8 @@ export function BoxOverlay({
   onChange: (region: ReviewRegion) => void;
   onCommit: (region: ReviewRegion) => void;
   onDraw: (page: number, rect: PdfRect) => void;
+  /** "Draw box" is on: dragging anywhere draws (no Shift needed — works with touch and pens). */
+  drawMode?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -72,6 +75,12 @@ export function BoxOverlay({
 
   function startBoxDrag(e: React.PointerEvent, region: ReviewRegion, kind: "move" | "resize", edge: Edge = {}) {
     e.stopPropagation();
+    // On touch, the first tap only selects a box (so the page can still be scrolled with a
+    // finger); once selected, dragging it moves it.
+    if (e.pointerType === "touch" && kind === "move" && selectedRegionId !== region.id) {
+      onSelect({ type: region.ownerType, id: region.ownerId }, region.id);
+      return;
+    }
     e.preventDefault();
     onSelect({ type: region.ownerType, id: region.ownerId }, region.id);
     const p = toPt(e.clientX, e.clientY);
@@ -80,7 +89,7 @@ export function BoxOverlay({
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    if (!e.shiftKey || !selectedOwner) return;
+    if (!(drawMode || e.shiftKey) || !selectedOwner) return;
     e.preventDefault();
     const p = toPt(e.clientX, e.clientY);
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -130,7 +139,8 @@ export function BoxOverlay({
   return (
     <div
       ref={ref}
-      className={cn("absolute inset-0", selectedOwner && "cursor-crosshair")}
+      className={cn("absolute inset-0", selectedOwner && (drawMode ? "cursor-crosshair" : "sm:cursor-crosshair"))}
+      style={{ touchAction: drawMode ? "none" : undefined }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -149,6 +159,7 @@ export function BoxOverlay({
             onPointerDown={(e) => startBoxDrag(e, r, "move")}
             className={cn(
               "absolute cursor-move select-none",
+              drawMode && "pointer-events-none", // draw over existing boxes
               isPart
                 ? "border border-dashed border-violet-500/70 bg-violet-500/10 hover:bg-violet-500/15"
                 : low
@@ -157,7 +168,7 @@ export function BoxOverlay({
               ownerSelected && (isPart ? "border-solid border-violet-600 bg-violet-500/20" : "ring-2 ring-blue-600/40"),
               regionSelected && "z-10 outline outline-2 outline-offset-1 outline-amber-500",
             )}
-            style={{ left: s.left, top: s.top, width: s.width, height: s.height }}
+            style={{ left: s.left, top: s.top, width: s.width, height: s.height, touchAction: regionSelected ? "none" : undefined }}
           >
             <span
               className={cn(
@@ -173,7 +184,11 @@ export function BoxOverlay({
                 <span
                   key={i}
                   onPointerDown={(e) => startBoxDrag(e, r, "resize", h.edge)}
-                  className={cn("absolute size-3 rounded-sm border border-amber-600 bg-white", h.cls)}
+                  // Bigger on touch screens, with an invisible 40px hit area around each handle.
+                  className={cn(
+                    "absolute size-3 rounded-sm border border-amber-600 bg-white pointer-coarse:size-4 before:absolute before:-inset-3 before:content-['']",
+                    h.cls,
+                  )}
                   style={{ cursor: h.cursor }}
                 />
               ))}

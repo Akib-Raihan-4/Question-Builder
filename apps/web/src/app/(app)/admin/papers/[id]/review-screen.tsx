@@ -6,6 +6,7 @@ import { usePdf } from "@/components/pdf/use-pdf";
 import { PdfPageCanvas } from "@/components/pdf/pdf-page-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { pdfToScreen, type PdfRect } from "@/lib/coords";
 import { publishIssues } from "@/lib/review/checks";
 import type { ReviewData, ReviewRegion } from "@/lib/review/types";
@@ -39,6 +40,17 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const [regionId, setRegionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [tab, setTab] = useState<"pages" | "questions">("pages");
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const { doc, error } = usePdf(`/api/papers/${initial.paper.id}/file`);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewerWidth, setViewerWidth] = useState(760);
@@ -123,9 +135,23 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   );
   const issues = useMemo(() => publishIssues(data.questions, data.parts, data.regions), [data]);
 
+  /** "Fit" scale (page fills the viewer width, at most 160%) times the zoom level. */
   function scaleFor(page: number) {
     const w = pageSizes[page]?.w ?? 595;
-    return Math.min(1.6, viewerWidth / w);
+    return Math.min(1.6, viewerWidth / w) * zoom;
+  }
+
+  function deleteSelectedBox() {
+    if (!regionId) return;
+    const id = regionId;
+    setRegionId(null);
+    run(() => api(`/api/admin/regions/${id}`, "DELETE"), "Box deleted");
+  }
+
+  function goToPage(i: number) {
+    const viewer = viewerRef.current;
+    const pageEl = document.getElementById(`page-${i}`);
+    if (viewer && pageEl) viewer.scrollTo({ top: pageEl.offsetTop - 8, behavior: "smooth" });
   }
 
   function updateRegionLocal(region: ReviewRegion) {
@@ -146,7 +172,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
     run(
       () => api(`/api/admin/regions`, "POST", { ownerType: owner.type, ownerId: owner.id, page, ...rect }),
       `Box added to ${labels[owner.id]}`,
-    );
+    ).then(() => setDrawMode(false));
   }
 
   function scrollToOwner(ownerId: string) {
@@ -237,18 +263,98 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
       {(data.paper.statusReason || data.questions.length === 0) && (
         <div className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900">
           {data.questions.length === 0
-            ? "No questions yet. Use “Add question” on the right, then hold Shift and drag on the page to draw its box."
+            ? "No questions yet. Use “Add question”, select it, then press Draw box (or hold Shift) and drag on the page to draw its box."
             : data.paper.statusReason}
         </div>
       )}
 
+      {/* Phones: one side at a time */}
+      <div className="flex items-center gap-2 border-b bg-background px-3 py-2 md:hidden">
+        <div className="inline-flex shrink-0 rounded-lg bg-muted p-0.5" role="tablist" aria-label="Review view">
+          {(
+            [
+              ["pages", "Pages"],
+              ["questions", `Questions (${data.questions.length})`],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => setTab(k)}
+              className={cn("whitespace-nowrap rounded-md px-3 py-1.5 text-sm", tab === k ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">Easiest on a tablet or computer.</span>
+      </div>
+
       <div className="flex min-h-0 flex-1">
         {/* Pages */}
-        <div ref={viewerRef} className="relative min-w-0 flex-1 overflow-y-auto bg-zinc-200/70 px-6 py-6">
+        <div className={cn("min-h-0 min-w-0 flex-1 flex-col", tab === "pages" ? "flex" : "hidden", "md:flex")}>
+          <div className="flex flex-wrap items-center gap-2 border-b bg-background px-3 py-2 text-sm">
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {owner ? (
+                <>
+                  Selected: <span className="font-medium text-foreground">{labels[owner.id]}</span>
+                </>
+              ) : (
+                "Select a question or part"
+              )}
+            </span>
+            <Button
+              size="sm"
+              variant={drawMode ? "default" : "outline"}
+              disabled={!owner}
+              aria-pressed={drawMode}
+              onClick={() => setDrawMode((d) => !d)}
+              title={owner ? "Then drag on the page to draw a box (Shift + drag also works)" : "Select a question or part first"}
+            >
+              {drawMode ? "Drawing… (tap to cancel)" : "Draw box"}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!regionId || busy} onClick={deleteSelectedBox} className="text-destructive">
+              Delete box
+            </Button>
+            <div className="ml-auto flex items-center gap-1">
+              <Button size="sm" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}>
+                −
+              </Button>
+              <button onClick={() => setZoom(1)} className="min-w-12 rounded px-1 text-xs tabular-nums hover:bg-muted" title="Fit to width">
+                {zoom === 1 ? "Fit" : `${Math.round(zoom * 100)}%`}
+              </button>
+              <Button size="sm" variant="ghost" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))}>
+                +
+              </Button>
+              {pageSizes.length > 0 && (
+                <select
+                  aria-label="Go to page"
+                  defaultValue=""
+                  onChange={(e) => {
+                    goToPage(Number(e.target.value));
+                    e.target.value = "";
+                  }}
+                  className="h-8 rounded-md border bg-background px-1.5 text-base sm:text-sm pointer-coarse:h-9"
+                >
+                  <option value="" disabled>
+                    Page…
+                  </option>
+                  {pageSizes.map((_, i) => (
+                    <option key={i} value={i}>
+                      Page {i + 1}
+                      {data.regions.some((r) => r.page === i) ? "" : " (no boxes)"}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+        <div ref={viewerRef} className="relative min-h-0 flex-1 overflow-auto bg-zinc-200/70 px-3 py-4 sm:px-6 sm:py-6">
           <p className="mx-auto mb-4 max-w-3xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-            Click a box to select it. Drag to move; drag its handles to resize. Hold <kbd className="rounded border px-1">Shift</kbd> and drag on
-            the page to draw a new box for the selected question or part. <kbd className="rounded border px-1">Delete</kbd> removes the selected
-            box. Boxes marked ✎ were edited by hand and are kept when the parser re-runs.
+            Tap or click a box to select it, then drag to move it or drag its handles to resize. To add a box, select a question or part and press{" "}
+            <span className="font-medium text-foreground">Draw box</span> (or hold <kbd className="rounded border px-1">Shift</kbd>) and drag on the page.
+            Boxes marked ✎ were edited by hand and are kept when the parser re-runs.
           </p>
           {error && <p className="text-sm text-destructive">Could not load the PDF: {error}</p>}
           {!doc && !error && <p className="text-sm text-muted-foreground">Loading PDF…</p>}
@@ -281,14 +387,17 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
                       onChange={updateRegionLocal}
                       onCommit={commitRegion}
                       onDraw={drawRegion}
+                      drawMode={drawMode}
                     />
                   </div>
                 </div>
               );
             })}
         </div>
+        </div>
 
         {/* Questions */}
+        <div className={cn("min-h-0 w-full flex-col md:flex md:w-[320px] md:shrink-0 lg:w-[380px]", tab === "questions" ? "flex" : "hidden")}>
         <QuestionPanel
           data={data}
           issues={issues}
@@ -297,11 +406,14 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
           onSelect={(o) => {
             setOwner(o);
             setRegionId(null);
-            scrollToOwner(o.id);
+            if (isPhone) setTab("pages");
+            // Wait a frame so the pages tab is visible on phones before scrolling.
+            requestAnimationFrame(() => scrollToOwner(o.id));
           }}
           run={run}
           api={api}
         />
+        </div>
       </div>
 
     </div>
