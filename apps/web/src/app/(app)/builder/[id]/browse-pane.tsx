@@ -5,6 +5,8 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfPageCanvas } from "@/components/pdf/pdf-page-canvas";
 import { getPdfDoc, onPdfProgress } from "@/components/pdf/pdf-cache";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
+import { HScroll } from "@/components/h-scroll";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
@@ -22,7 +24,6 @@ export type SourcePaper = {
   pageCount: number | null;
 };
 
-const selectCls = "h-9 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
 
 export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   const subjects = useMemo(() => {
@@ -133,28 +134,35 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
             </button>
           ))}
         </div>
-        <select
-          className={selectCls}
-          value={subjectId}
-          onChange={(e) => {
-            setSubjectId(e.target.value);
-            setPaperId(sources.find((s) => s.subjectId === e.target.value)?.id ?? "");
-          }}
+        <Select
           aria-label="Subject"
-        >
-          {subjects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        {mode === "browse" && <select className={`${selectCls} min-w-0 flex-1`} value={paperId} onChange={(e) => setPaperId(e.target.value)} aria-label="Past paper">
-          {papers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year} {p.series} · {p.paperCode}{p.tier ? ` (${p.tier === "H" ? "Higher" : "Foundation"})` : ""}
-            </option>
-          ))}
-        </select>}
+          value={subjectId}
+          onValueChange={(v) => {
+            setSubjectId(v);
+            setPaperId(sources.find((s) => s.subjectId === v)?.id ?? "");
+          }}
+          options={subjects.map(([id, name]) => ({ value: id, label: name }))}
+          className="max-w-[14rem]"
+        />
+        {mode === "browse" && (
+          <Select
+            aria-label="Past paper"
+            value={paperId}
+            onValueChange={setPaperId}
+            className="flex-1 sm:max-w-xs"
+            options={papers.map((p) => ({
+              value: p.id,
+              label: `${p.series} ${p.year} · ${p.paperCode}`,
+              hint: p.tier ? (p.tier === "H" ? "Higher" : "Foundation") : undefined,
+              group: String(p.year),
+            }))}
+          />
+        )}
       </div>
       {mode === "browse" && questions && questions.length > 0 && (
-        <div className="flex items-center gap-1 overflow-x-auto border-b bg-background px-3 py-1.5" aria-label="Jump to a question">
-          <span className="shrink-0 pr-1 text-xs text-muted-foreground">Jump to</span>
+        <div className="flex items-center gap-2 border-b bg-background px-3 pt-1.5" role="navigation" aria-label="Jump to a question">
+          <span className="shrink-0 pb-1.5 text-xs text-muted-foreground">Jump to</span>
+          <HScroll label="questions" className="flex-1">
           {questions.map((q) => {
             const inPaper = items.some((i) => i.questionId === q.id);
             return (
@@ -172,6 +180,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
               </button>
             );
           })}
+          </HScroll>
         </div>
       )}
       {mode === "search" && <SearchPane subjectId={subjectId} sources={sources} />}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { loadBankQuestions } from "./server";
 import type { BankQuestion } from "./model";
+import { searchWords, snippet } from "./highlight";
 
 /** Search filters. Topic search is postponed (no topics yet). */
 export const SearchParams = z.object({
@@ -20,7 +21,8 @@ export const SearchParams = z.object({
 });
 export type SearchParams = z.infer<typeof SearchParams>;
 
-export type SearchHit = BankQuestion & { uses: number };
+/** snippet: a little of the question's text around the search words. */
+export type SearchHit = BankQuestion & { uses: number; snippet: string };
 
 /** Questions from PUBLISHED papers only, with how often teachers have used each. */
 export async function searchQuestions(p: SearchParams): Promise<{ total: number; hits: SearchHit[] }> {
@@ -46,7 +48,7 @@ export async function searchQuestions(p: SearchParams): Promise<{ total: number;
         : [desc(schema.papers.year), asc(schema.papers.series), asc(schema.papers.paperCode), asc(schema.questions.number)];
 
   const rows = await db
-    .select({ id: schema.questions.id, uses, total: sql<number>`count(*) over ()::int` })
+    .select({ id: schema.questions.id, text: schema.questions.text, uses, total: sql<number>`count(*) over ()::int` })
     .from(schema.questions)
     .innerJoin(schema.papers, eq(schema.papers.id, schema.questions.paperId))
     .where(and(...conds))
@@ -58,7 +60,9 @@ export async function searchQuestions(p: SearchParams): Promise<{ total: number;
   const bank = new Map((await loadBankQuestions({ questionIds: rows.map((r) => r.id) })).map((q) => [q.id, q]));
   return {
     total: rows[0].total,
-    hits: rows.filter((r) => bank.has(r.id)).map((r) => ({ ...bank.get(r.id)!, uses: r.uses })),
+    hits: rows
+      .filter((r) => bank.has(r.id))
+      .map((r) => ({ ...bank.get(r.id)!, uses: r.uses, snippet: snippet(r.text, searchWords(p.q ?? "")) })),
   };
 }
 

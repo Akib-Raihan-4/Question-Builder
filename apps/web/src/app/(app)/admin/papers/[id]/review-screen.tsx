@@ -7,6 +7,7 @@ import { PdfPageCanvas } from "@/components/pdf/pdf-page-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
 import { pdfToScreen, type PdfRect } from "@/lib/coords";
 import { publishIssues } from "@/lib/review/checks";
 import type { ReviewData, ReviewRegion } from "@/lib/review/types";
@@ -189,25 +190,18 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const published = data.paper.status === "published";
   const pagePicker =
     pageSizes.length > 0 ? (
-      <select
-                  aria-label="Go to page"
-                  defaultValue=""
-                  onChange={(e) => {
-                    goToPage(Number(e.target.value));
-                    e.target.value = "";
-                  }}
-                  className="h-8 w-24 rounded-md border bg-background px-1.5 text-base sm:text-sm pointer-coarse:h-9"
-                >
-                  <option value="" disabled>
-                    Page…
-                  </option>
-                  {pageSizes.map((_, i) => (
-                    <option key={i} value={i}>
-                      Page {i + 1}
-                      {data.regions.some((r) => r.page === i) ? "" : " (no boxes)"}
-                    </option>
-                  ))}
-                </select>
+      <Select
+        aria-label="Go to page"
+        value=""
+        placeholder="Page…"
+        onValueChange={(v) => goToPage(Number(v))}
+        className="h-8 w-24 pointer-coarse:h-9"
+        options={pageSizes.map((_, i) => ({
+          value: String(i),
+          label: `Page ${i + 1}`,
+          hint: data.regions.some((r) => r.page === i) ? undefined : "no boxes",
+        }))}
+      />
     ) : null;
 
   return (

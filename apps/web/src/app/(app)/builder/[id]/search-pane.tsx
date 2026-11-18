@@ -6,6 +6,8 @@ import type { SearchHit } from "@/lib/builder/search";
 import { useBuilder } from "@/lib/builder/store";
 import { pickPart, pickQuestion, unpickPart, unpickQuestion } from "@/lib/builder/actions";
 import { cn } from "@/lib/utils";
+import { searchWords, splitMatches } from "@/lib/builder/highlight";
+import { Select } from "@/components/ui/select";
 import type { SourcePaper } from "./browse-pane";
 
 const field = "h-9 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
@@ -71,6 +73,9 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  // "any" stands for no filter (a dropdown needs a value for every row).
+  const pick = (k: keyof Filters) => (v: string) => setFilters((f) => ({ ...f, [k]: v === "any" ? "" : v }));
+  const words = useMemo(() => searchWords(debounced.q), [debounced.q]);
   const set = (k: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setFilters((f) => ({ ...f, [k]: k.endsWith("Marks") ? e.target.value.replace(/\D/g, "") : e.target.value }));
 
@@ -79,31 +84,39 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
       <div className="space-y-2 border-b bg-background px-4 py-2.5">
         <input className={cn(field, "w-full")} placeholder="Search question text, e.g. probability, sequence, cone…" value={filters.q} onChange={set("q")} aria-label="Search text" />
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <select className={field} value={filters.yearFrom} onChange={set("yearFrom")} aria-label="From year">
-            <option value="">Any year</option>
-            {years.map((y) => <option key={y} value={y}>from {y}</option>)}
-          </select>
-          <select className={field} value={filters.yearTo} onChange={set("yearTo")} aria-label="To year">
-            <option value="">to any</option>
-            {years.map((y) => <option key={y} value={y}>to {y}</option>)}
-          </select>
-          <select className={field} value={filters.series} onChange={set("series")} aria-label="Series">
-            <option value="">Any series</option>
-            <option>January</option>
-            <option>June</option>
-            <option>October</option>
-            <option>November</option>
-          </select>
+          <Select
+            aria-label="From year"
+            value={filters.yearFrom || "any"}
+            onValueChange={pick("yearFrom")}
+            options={[{ value: "any", label: "Any year" }, ...years.map((y) => ({ value: String(y), label: `from ${y}` }))]}
+          />
+          <Select
+            aria-label="To year"
+            value={filters.yearTo || "any"}
+            onValueChange={pick("yearTo")}
+            options={[{ value: "any", label: "to any" }, ...years.map((y) => ({ value: String(y), label: `to ${y}` }))]}
+          />
+          <Select
+            aria-label="Series"
+            value={filters.series || "any"}
+            onValueChange={pick("series")}
+            options={[{ value: "any", label: "Any series" }, ...["January", "June", "October", "November"].map((s) => ({ value: s, label: s }))]}
+          />
           <span className="flex items-center gap-1 text-muted-foreground">
             Marks
             <input className={cn(field, "w-12")} placeholder="min" value={filters.minMarks} onChange={set("minMarks")} aria-label="Minimum marks" />–
             <input className={cn(field, "w-12")} placeholder="max" value={filters.maxMarks} onChange={set("maxMarks")} aria-label="Maximum marks" />
           </span>
-          <select className={field} value={filters.sort} onChange={set("sort")} aria-label="Sort">
-            <option value="paper">Newest papers first</option>
-            <option value="marks">Most marks first</option>
-            <option value="popular">Most used first</option>
-          </select>
+          <Select
+            aria-label="Sort"
+            value={filters.sort}
+            onValueChange={pick("sort")}
+            options={[
+              { value: "paper", label: "Newest papers first" },
+              { value: "marks", label: "Most marks first" },
+              { value: "popular", label: "Most used first" },
+            ]}
+          />
           {JSON.stringify(filters) !== JSON.stringify(EMPTY) && (
             <button className="text-xs text-muted-foreground underline" onClick={() => setFilters(EMPTY)}>Clear</button>
           )}
@@ -124,7 +137,7 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
             No questions match. Try fewer words or a wider marks range.
           </div>
         )}
-        {hits.map((h) => <HitCard key={h.id} hit={h} width={width} />)}
+        {hits.map((h) => <HitCard key={h.id} hit={h} width={width} words={words} />)}
         {hits.length < total && (
           <button disabled={loading} onClick={() => load(hits.length)} className="w-full rounded-md border bg-background py-2 text-sm hover:bg-muted">
             {loading ? "Loading…" : `Show more (${total - hits.length} left)`}
@@ -135,7 +148,7 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
   );
 }
 
-function HitCard({ hit, width }: { hit: SearchHit; width: number }) {
+function HitCard({ hit, width, words }: { hit: SearchHit; width: number; words: string[] }) {
   const item = useBuilder((s) => s.items.find((i) => i.questionId === hit.id));
   const serial = useBuilder((s) => s.items.findIndex((i) => i.questionId === hit.id) + 1);
   const [expanded, setExpanded] = useState(false);
@@ -176,9 +189,22 @@ function HitCard({ hit, width }: { hit: SearchHit; width: number }) {
           </button>
         </div>
       </div>
+      {words.length > 0 && hit.snippet && (
+        <p className="border-t bg-zinc-50 px-3 py-1.5 text-xs leading-relaxed text-muted-foreground">
+          {splitMatches(hit.snippet, words).map((p, i) =>
+            p.match ? (
+              <mark key={i} className="rounded-sm bg-yellow-200 px-0.5 text-foreground">
+                {p.text}
+              </mark>
+            ) : (
+              <span key={i}>{p.text}</span>
+            ),
+          )}
+        </p>
+      )}
       <div className={cn("relative border-t bg-white px-3 py-2", !expanded && "max-h-56 overflow-hidden")}>
         {regions.map((r, i) => (
-          <CropCanvas key={i} paperId={hit.paperId} page={r.page} rect={r} scale={scale} />
+          <CropCanvas key={i} paperId={hit.paperId} page={r.page} rect={r} scale={scale} highlight={words} />
         ))}
         {!expanded && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white" />}
       </div>

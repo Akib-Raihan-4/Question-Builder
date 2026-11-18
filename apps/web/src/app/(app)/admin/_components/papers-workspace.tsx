@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PapersTable, type PaperRow } from "./papers-table";
 import { UploadPanel, type Subject } from "./upload-panel";
+import { Select } from "@/components/ui/select";
 
 /** Past papers, one tab per subject/level (e.g. "Mathematics B · International GCSE", "Physics Unit 3 · International A Level"). */
 export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows: (PaperRow & { subjectId: string })[] }) {
@@ -96,12 +97,12 @@ function AddSubject({ onAdded }: { onAdded: (id: string) => void }) {
       <p className="text-sm text-muted-foreground sm:col-span-4">
         Add a subject or an A-level unit. Papers whose code starts with the spec code (e.g. <b>WPH14</b>/01) are matched to it automatically.
       </p>
-      <select className="h-9 rounded-lg border px-2 text-sm" value={qualification} onChange={(e) => setQualification(e.target.value)} aria-label="Qualification">
-        <option>International A Level</option>
-        <option>International GCSE</option>
-        <option>A Level</option>
-        <option>GCSE</option>
-      </select>
+      <Select
+        aria-label="Qualification"
+        value={qualification}
+        onValueChange={setQualification}
+        options={["International A Level", "International GCSE", "A Level", "GCSE"].map((q) => ({ value: q, label: q }))}
+      />
       <Input placeholder="Name, e.g. Physics Unit 4" value={name} onChange={(e) => setName(e.target.value)} required aria-label="Subject name" />
       <Input placeholder="Spec code, e.g. WPH14" value={specCode} onChange={(e) => setSpecCode(e.target.value.toUpperCase())} required aria-label="Spec code" />
       <Button type="submit" disabled={busy}>{busy ? "Adding…" : "Add subject"}</Button>
