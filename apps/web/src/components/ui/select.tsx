@@ -28,6 +28,7 @@ export function Select({
   disabled,
   "aria-label": ariaLabel,
   id,
+  name,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -38,6 +39,8 @@ export function Select({
   disabled?: boolean;
   "aria-label"?: string;
   id?: string;
+  /** Submits the value with a surrounding <form> under this name. */
+  name?: string;
 }) {
   const items = options.map((o) => ({ value: o.value, label: o.label }));
   // Keep the groups in the order they first appear.
@@ -50,7 +53,7 @@ export function Select({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <S.Root items={items} value={value || null} onValueChange={(v) => v != null && onValueChange(String(v))} disabled={disabled}>
+    <S.Root items={items} value={value || null} onValueChange={(v) => v != null && onValueChange(String(v))} disabled={disabled} name={name}>
       <S.Trigger
         id={id}
         aria-label={ariaLabel}

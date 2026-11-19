@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { paperNo } from "@/lib/paper-filename";
 import { confirmDialog, toast } from "@/components/feedback";
 import { EmptyState } from "@/components/empty-state";
 
@@ -55,6 +56,9 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | PaperRow["status"]>("all");
+  // Subjects with several papers (Maths B Paper 1, Paper 2): show one at a time if wanted.
+  const paperNos = [...new Set(rows.map((r) => paperNo(r.paperCode)).filter(Boolean))].sort((a, b) => a - b);
+  const [paperFilter, setPaperFilter] = useState(0);
   const active = rows.some((r) => r.status === "processing" || r.status === "uploaded");
 
   // Poll while anything is processing so statuses update without a manual refresh.
@@ -78,7 +82,9 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
 
   const counts = { all: rows.length, needs_review: 0, published: 0, failed: 0, processing: 0 } as Record<string, number>;
   for (const r of rows) counts[r.status === "uploaded" ? "processing" : r.status] = (counts[r.status === "uploaded" ? "processing" : r.status] ?? 0) + 1;
-  const shown = rows.filter((r) => filter === "all" || r.status === filter || (filter === "processing" && r.status === "uploaded"));
+  const shown = rows
+    .filter((r) => !paperFilter || paperNo(r.paperCode) === paperFilter)
+    .filter((r) => filter === "all" || r.status === filter || (filter === "processing" && r.status === "uploaded"));
 
   if (rows.length === 0) {
     return (
@@ -145,6 +151,22 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
               {label} <span className="tabular-nums opacity-70">{counts[k]}</span>
             </button>
           ))}
+        {paperNos.length > 1 && (
+          <div className="ml-auto inline-flex shrink-0 rounded-lg bg-muted p-0.5 text-xs" role="radiogroup" aria-label="Paper">
+            {[0, ...paperNos].map((n) => (
+              <button
+                key={n}
+                type="button"
+                role="radio"
+                aria-checked={paperFilter === n}
+                onClick={() => setPaperFilter(n)}
+                className={cn("rounded-md px-2.5 py-1", paperFilter === n ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+              >
+                {n ? `Paper ${n}` : "All papers"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Phones: one card per paper */}

@@ -7,7 +7,7 @@ import { getPdfDoc, onPdfProgress } from "@/components/pdf/pdf-cache";
 import { cn } from "@/lib/utils";
 import { Select } from "@/components/ui/select";
 import { HScroll } from "@/components/h-scroll";
-import { isRegional } from "@/lib/paper-filename";
+import { isRegional, paperNo } from "@/lib/paper-filename";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
@@ -27,14 +27,25 @@ export type SourcePaper = {
 
 
 export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
+  // What to pick from: a subject, or — when it has several papers (Maths B Paper 1 and Paper 2) —
+  // each paper of it separately. Regional versions (2R) go with their paper.
   const subjects = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of sources) m.set(s.subjectId, `${s.specCode} ${s.subject}`);
-    return [...m];
+    const bySubject = new Map<string, { name: string; nos: Set<number> }>();
+    for (const s of sources) {
+      const e = bySubject.get(s.subjectId) ?? { name: `${s.specCode} ${s.subject}`, nos: new Set<number>() };
+      const n = paperNo(s.paperCode);
+      if (n) e.nos.add(n);
+      bySubject.set(s.subjectId, e);
+    }
+    return [...bySubject].flatMap(([id, e]): [string, string][] =>
+      e.nos.size > 1 ? [...e.nos].sort((a, b) => a - b).map((n): [string, string] => [`${id}|${n}`, `${e.name} · Paper ${n}`]) : [[`${id}|`, e.name]],
+    );
   }, [sources]);
   const [mode, setMode] = useState<"browse" | "search">("browse");
-  const [subjectId, setSubjectId] = useState(subjects[0]?.[0] ?? "");
-  const papers = sources.filter((s) => s.subjectId === subjectId);
+  const [collection, setCollection] = useState<string>(subjects[0]?.[0] ?? "");
+  const [subjectId, collectionNo] = collection.split("|");
+  const inCollection = (s: SourcePaper) => s.subjectId === subjectId && (!collectionNo || paperNo(s.paperCode) === Number(collectionNo));
+  const papers = sources.filter(inCollection);
   const [paperId, setPaperId] = useState(papers[0]?.id ?? "");
   const [questions, setQuestions] = useState<BankQuestion[] | null>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -137,13 +148,14 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
         </div>
         <Select
           aria-label="Subject"
-          value={subjectId}
+          value={collection}
           onValueChange={(v) => {
-            setSubjectId(v);
-            setPaperId(sources.find((s) => s.subjectId === v)?.id ?? "");
+            setCollection(v);
+            const [sid, no] = v.split("|");
+            setPaperId(sources.find((s) => s.subjectId === sid && (!no || paperNo(s.paperCode) === Number(no)))?.id ?? "");
           }}
           options={subjects.map(([id, name]) => ({ value: id, label: name }))}
-          className="max-w-[14rem]"
+          className="max-w-[16rem]"
         />
         {mode === "browse" && (
           <Select
@@ -184,7 +196,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
           </HScroll>
         </div>
       )}
-      {mode === "search" && <SearchPane subjectId={subjectId} sources={sources} />}
+      {mode === "search" && <SearchPane key={collection} subjectId={subjectId} paperNo={collectionNo ? Number(collectionNo) : undefined} sources={sources} />}
       <div ref={ref} hidden={mode === "search"} className="min-h-0 flex-1 overflow-y-auto bg-zinc-200/70 px-5 py-4">
         <p className="mx-auto mb-3 max-w-2xl rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
           Click a part to add it, or the <span className="rounded bg-blue-600 px-1 font-bold text-white">+</span> tab to add the whole

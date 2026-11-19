@@ -10,12 +10,10 @@ import { unzipSync } from "fflate";
 import { isRegional, parsePaperFilename, SERIES, withRegional } from "@/lib/paper-filename";
 import { matchSubject, MAX_UPLOAD_BYTES } from "@/lib/papers/match";
 import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
 
 export type Subject = { id: string; name: string; specCode: string; qualification: string };
 type BulkRow = { file: string; ok: boolean; message: string };
-
-const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-base sm:text-sm pointer-coarse:h-10 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export const subjectLabel = (s: Subject) => `${s.name} · ${s.qualification} (${s.specCode})`;
 
@@ -72,6 +70,9 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
   const [series, setSeries] = useState<string>("June");
   const [year, setYear] = useState(String(new Date().getFullYear() - 1));
   const [tier, setTier] = useState("");
+  // Regional (R) is its own choice: it can be picked before or after the code, and is applied to
+  // the code when the paper is uploaded (4MB1/02 → 4MB1/02R).
+  const [regional, setRegional] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);
   const [reading, setReading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -95,6 +96,7 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
       const s = subjects.find((x) => x.specCode === meta.specCode);
       if (s) setSubjectId(s.id);
       setPaperCode(meta.paperCode);
+      setRegional(isRegional(meta.paperCode));
       setSeries(meta.series);
       setYear(String(meta.year));
       setTier(meta.tier ?? "");
@@ -108,7 +110,10 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
       const body = await res.json();
       const c = body.cover;
       if (c) {
-        if (c.paper_code) setPaperCode(c.paper_code);
+        if (c.paper_code) {
+          setPaperCode(c.paper_code);
+          setRegional(isRegional(c.paper_code));
+        }
         if (c.series) setSeries(c.series);
         if (c.year) setYear(String(c.year));
         if (c.tier) setTier(c.tier);
@@ -133,6 +138,7 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     fd.set("autoDetect", String(autoDetect));
+    fd.set("paperCode", withRegional(paperCode, regional));
     const res = await fetch("/api/admin/papers", { method: "POST", body: fd });
     const body = await res.json().catch(() => ({}));
     setPending(false);
@@ -143,6 +149,7 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
     });
     formRef.current?.reset();
     setPaperCode("");
+    setRegional(false);
     setNote(null);
     router.refresh();
   }
@@ -156,41 +163,71 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
       </div>
       <div className="space-y-2">
         <Label htmlFor="subjectId">Subject</Label>
-        <select id="subjectId" name="subjectId" className={selectCls} value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
-          {subjects.map((s) => <option key={s.id} value={s.id}>{subjectLabel(s)}</option>)}
-        </select>
+        <Select
+          id="subjectId"
+          aria-label="Subject"
+          className="w-full"
+          value={subjectId}
+          onValueChange={setSubjectId}
+          options={subjects.map((s) => ({ value: s.id, label: subjectLabel(s), group: s.qualification }))}
+        />
+        <input type="hidden" name="subjectId" value={subjectId} />
       </div>
       <div className="space-y-2">
         <Label htmlFor="paperCode">Paper code</Label>
-        <Input id="paperCode" name="paperCode" placeholder="e.g. 4MB1/01 or WPH13/01" value={paperCode} onChange={(e) => setPaperCode(e.target.value.toUpperCase())} required />
+        <Input
+          id="paperCode"
+          name="paperCode"
+          placeholder="e.g. 4MB1/01 or WPH13/01"
+          value={paperCode}
+          onChange={(e) => {
+            const v = e.target.value.toUpperCase();
+            setPaperCode(v);
+            if (isRegional(v)) setRegional(true);
+          }}
+          required
+        />
+        {regional && paperCode && withRegional(paperCode, true) !== paperCode && (
+          <p className="text-xs text-muted-foreground">Uploads as {withRegional(paperCode, true)}</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="version">Version</Label>
-        <select
+        <Select
           id="version"
-          className={selectCls}
-          value={isRegional(paperCode) ? "R" : ""}
-          onChange={(e) => setPaperCode(withRegional(paperCode, e.target.value === "R"))}
-          disabled={!/\/\d{1,2}[FH]?R?$/.test(paperCode)}
-          title={/\/\d{1,2}[FH]?R?$/.test(paperCode) ? "Regional papers have R at the end of their code" : "Type a paper code like 4MB1/02 first"}
-        >
-          <option value="">Standard</option>
-          <option value="R">Regional (R)</option>
-        </select>
+          aria-label="Version"
+          className="w-full"
+          value={regional ? "R" : "S"}
+          onValueChange={(v) => {
+            setRegional(v === "R");
+            if (paperCode) setPaperCode(withRegional(paperCode, v === "R"));
+          }}
+          options={[
+            { value: "S", label: "Standard" },
+            { value: "R", label: "Regional (R)", hint: "code ends in R" },
+          ]}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="tier">Tier</Label>
-        <select id="tier" name="tier" className={selectCls} value={tier} onChange={(e) => setTier(e.target.value)}>
-          <option value="">No tier</option>
-          <option value="F">Foundation</option>
-          <option value="H">Higher</option>
-        </select>
+        <Select
+          id="tier"
+          aria-label="Tier"
+          className="w-full"
+          value={tier || "none"}
+          onValueChange={(v) => setTier(v === "none" ? "" : v)}
+          options={[
+            { value: "none", label: "No tier" },
+            { value: "F", label: "Foundation" },
+            { value: "H", label: "Higher" },
+          ]}
+        />
+        <input type="hidden" name="tier" value={tier} />
       </div>
       <div className="space-y-2">
         <Label htmlFor="series">Series</Label>
-        <select id="series" name="series" className={selectCls} value={series} onChange={(e) => setSeries(e.target.value)}>
-          {SERIES.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <Select id="series" aria-label="Series" className="w-full" value={series} onValueChange={setSeries} options={SERIES.map((x) => ({ value: x, label: x }))} />
+        <input type="hidden" name="series" value={series} />
       </div>
       <div className="space-y-2">
         <Label htmlFor="year">Year</Label>

@@ -278,3 +278,44 @@ regions on the original MS PDF, never as text or images.
   ("Specimen Paper", "Sample Assessment Material", dated by "Specimen 2017", "first teaching …
   2016" or ©) and from file names (SPECIMEN / SAM / SAMS). Needs a real specimen paper to confirm.
 - Later: scanned papers could be read with OCR (needs Tesseract on the processor).
+
+## Remaining work (updated 19 Nov 2026)
+
+Done since the plan above: A (logo, watermark), B (answer space), C steps 1–3 for Physics (mark
+schemes read, linked, auto-checked by marks, reviewed side by side, published in bulk, exported),
+paper versions (regional R, Specimen, Paper 1 / Paper 2 shown separately), subject renaming,
+styled dropdowns on upload and Edit details, clear processor errors + connection check.
+
+### Next (most useful first)
+1. **Maths B mark schemes (C4).** Tune the reader for Question | Working | Answer | Mark | Notes
+   tables ("1 (a)" labels, "Total N marks" rows, totals in the Mark column). Samples are in
+   `samples/Maths-B-MS` and `samples/Maths-B-P2`. Done when every sample links every part and the
+   marks check passes.
+2. **Bulk mark scheme upload.** Drop many mark scheme PDFs at once; each is matched to its paper
+   from the cover ("Mark Scheme (Results) January 2024 … (WPH13) Paper 01", or the publications code
+   "WPH13_01_2401_MS") and the file name; unmatched ones are listed to pick by hand.
+3. **Mark scheme in the builder preview.** A "Show mark scheme" switch under each question, so
+   teachers see the answers while they build.
+4. **Keep the processor awake.** Render's free plan sleeps after ~15 min, so the first upload or
+   Word export after a break waits ~1 min. Either a free uptime pinger (e.g. cron-job.org hitting
+   `/health` every 10 min) or Render's paid plan.
+5. **Backups.** Turn on file versioning for the B2 bucket; a weekly `pg_dump` of Neon to B2 (Neon's
+   free plan only restores a short way back).
+6. **One end-to-end test** (Playwright): sign in, pick questions, export PDF and mark scheme.
+
+### Then
+- Mark schemes in Word (pictures mode, like the paper).
+- Draw / move mark scheme boxes by hand (today rows can be re-linked or removed, not redrawn).
+- Bulk question-paper upload already exists as ZIP; add the same drag-and-drop of many PDFs.
+- Teachers: after an admin sets a temporary password, ask them to choose a new one at sign-in.
+- Scanned papers: read with OCR (Tesseract in the processor image) instead of "mark by hand".
+- Specimen papers: confirm cover reading on a real specimen paper and mark scheme.
+- Teacher home: subject cards open the builder on that subject / paper.
+- Usage page: which mark schemes teachers export, questions without a mark scheme.
+- Data tidy-ups: "WPH13/01 January 2027" (year looks wrong; it's also tagged Higher tier).
+
+### Later
+- Topic tagging and search by topic (postponed; work parked in `git stash`).
+- Cambridge IGCSE parser.
+- Shuffled versions of a paper (different question order per student group).
+- Sharing papers between teachers / a school library.

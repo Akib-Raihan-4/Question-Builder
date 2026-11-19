@@ -27,8 +27,10 @@ type Filters = {
 const EMPTY: Filters = { q: "", paperNo: "", yearFrom: "", yearTo: "", series: "", minMarks: "", maxMarks: "", sort: "paper" };
 
 /** Find questions across all published papers of a subject (topics are postponed). */
-export function SearchPane({ subjectId, sources }: { subjectId: string; sources: SourcePaper[] }) {
-  const [filters, setFilters] = useState<Filters>(EMPTY);
+export function SearchPane({ subjectId, paperNo: fixedPaperNo, sources }: { subjectId: string; paperNo?: number; sources: SourcePaper[] }) {
+  // When the subject menu already chose a paper (e.g. Maths B Paper 2), search only that paper.
+  const start: Filters = { ...EMPTY, paperNo: fixedPaperNo ? String(fixedPaperNo) : "" };
+  const [filters, setFilters] = useState<Filters>(start);
   const [debounced, setDebounced] = useState(filters);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [total, setTotal] = useState(0);
@@ -112,7 +114,7 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
             onValueChange={pick("series")}
             options={[{ value: "any", label: "Any series" }, ...SERIES.map((s) => ({ value: s, label: s }))]}
           />
-          {paperNos.length > 1 && (
+          {paperNos.length > 1 && !fixedPaperNo && (
             <Select
               aria-label="Paper"
               value={filters.paperNo || "any"}
@@ -138,8 +140,8 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
               { value: "popular", label: "Most used first" },
             ]}
           />
-          {JSON.stringify(filters) !== JSON.stringify(EMPTY) && (
-            <button className="text-xs text-muted-foreground underline" onClick={() => setFilters(EMPTY)}>Clear</button>
+          {JSON.stringify(filters) !== JSON.stringify(start) && (
+            <button className="text-xs text-muted-foreground underline" onClick={() => setFilters(start)}>Clear</button>
           )}
         </div>
       </div>

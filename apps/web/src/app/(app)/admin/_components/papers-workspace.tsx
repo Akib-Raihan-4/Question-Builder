@@ -22,6 +22,7 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
   const firstWithPapers = tabs.find((s) => counts.get(s.id))?.id ?? tabs[0]?.id ?? "";
   const active = params.get("subject") ?? firstWithPapers;
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [uploading, setUploading] = useState(false);
   const current = subjects.find((s) => s.id === active);
   const showUpload = uploading || (counts.get(active) ?? 0) === 0;
@@ -58,15 +59,23 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
         <Button onClick={() => setUploading((u) => !u)} variant={showUpload ? "outline" : "default"} disabled={(counts.get(active) ?? 0) === 0}>
           {showUpload && (counts.get(active) ?? 0) > 0 ? "Hide upload" : "Upload papers"}
         </Button>
-        <Button variant="ghost" onClick={() => setAdding((a) => !a)}>
+        <Button variant="ghost" onClick={() => { setAdding((a) => !a); setRenaming(false); }}>
           {adding ? "Cancel" : "+ Add subject"}
         </Button>
+        {current && (
+          <Button variant="ghost" onClick={() => { setRenaming((r) => !r); setAdding(false); }}>
+            {renaming ? "Cancel" : "Rename subject"}
+          </Button>
+        )}
         <div className="ml-auto">
           <ProcessorStatus />
         </div>
       </div>
 
-      {adding && <AddSubject onAdded={(id) => { setAdding(false); router.refresh(); select(id); }} />}
+      {adding && <SubjectForm onDone={(id) => { setAdding(false); router.refresh(); select(id); }} />}
+      {renaming && current && (
+        <SubjectForm key={current.id} subject={current} onDone={() => { setRenaming(false); router.refresh(); }} />
+      )}
 
       {showUpload && <UploadPanel subjects={subjects} defaultSubjectId={current?.id} />}
       {current && (
@@ -77,12 +86,14 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
   );
 }
 
-function AddSubject({ onAdded }: { onAdded: (id: string) => void }) {
-  const [qualification, setQualification] = useState("International A Level");
-  const [name, setName] = useState("");
-  const [specCode, setSpecCode] = useState("");
+/** Add a subject, or rename one (name, level, spec code). */
+function SubjectForm({ subject, onDone }: { subject?: Subject; onDone: (id: string) => void }) {
+  const [qualification, setQualification] = useState(subject?.qualification ?? "International A Level");
+  const [name, setName] = useState(subject?.name ?? "");
+  const [specCode, setSpecCode] = useState(subject?.specCode ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const editing = Boolean(subject);
 
   return (
     <form
@@ -91,29 +102,35 @@ function AddSubject({ onAdded }: { onAdded: (id: string) => void }) {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await fetch("/api/admin/subjects", {
-          method: "POST",
+        const res = await fetch(editing ? `/api/admin/subjects/${subject!.id}` : "/api/admin/subjects", {
+          method: editing ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ qualification, name, specCode }),
         });
         const body = await res.json().catch(() => ({}));
         setBusy(false);
-        if (!res.ok) return setError(body.error ?? "Could not add the subject");
-        onAdded(body.id);
+        if (!res.ok) return setError(body.error ?? (editing ? "Could not save the subject" : "Could not add the subject"));
+        onDone(body.id);
       }}
     >
       <p className="text-sm text-muted-foreground sm:col-span-4">
-        Add a subject or an A-level unit. Papers whose code starts with the spec code (e.g. <b>WPH14</b>/01) are matched to it automatically.
+        {editing ? (
+          <>Rename this subject. Teachers see the new name straight away; its papers stay with it.</>
+        ) : (
+          <>
+            Add a subject or an A-level unit. Papers whose code starts with the spec code (e.g. <b>WPH14</b>/01) are matched to it automatically.
+          </>
+        )}
       </p>
       <Select
         aria-label="Qualification"
         value={qualification}
         onValueChange={setQualification}
-        options={["International A Level", "International GCSE", "A Level", "GCSE"].map((q) => ({ value: q, label: q }))}
+        options={["International A Level", "International GCSE", "A Level", "GCSE", "O Level"].map((q) => ({ value: q, label: q }))}
       />
       <Input placeholder="Name, e.g. Physics Unit 4" value={name} onChange={(e) => setName(e.target.value)} required aria-label="Subject name" />
       <Input placeholder="Spec code, e.g. WPH14" value={specCode} onChange={(e) => setSpecCode(e.target.value.toUpperCase())} required aria-label="Spec code" />
-      <Button type="submit" disabled={busy}>{busy ? "Adding…" : "Add subject"}</Button>
+      <Button type="submit" disabled={busy}>{busy ? "Saving…" : editing ? "Save" : "Add subject"}</Button>
       {error && <p className="text-sm text-destructive sm:col-span-4">{error}</p>}
     </form>
   );

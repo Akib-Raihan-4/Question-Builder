@@ -39,6 +39,9 @@ const MONTH_TO_SERIES: Record<string, Series> = {
   SPECIMEN: "Specimen", SPEC: "Specimen", SAM: "Specimen", SAMS: "Specimen",
 };
 
+/** Paper number from a code: "4MB1/02R" → 2, "4MA1/1H" → 1 (0 when there isn't one). */
+export const paperNo = (code: string) => Number(code.match(/\/0*(\d+)/)?.[1] ?? 0);
+
 /** A regional paper's code ends in R after its tier letter: 4MB1/02R, 4MA1/1HR. */
 export const isRegional = (paperCode: string) => /\/\d{1,2}[FH]?R$/i.test(paperCode.trim());
 
