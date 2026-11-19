@@ -76,11 +76,14 @@ class _Label:
     marks: int | None = None
     end: tuple[int, float] | None = None  # (page, y1) of its marks line
     children: list["_Label"] = field(default_factory=list)
+    # Where its box starts: the label itself, or — for a letter's first roman part — the letter's
+    # label, so "(a) The student used …" and its picture come with (a)(i).
+    start: tuple[int, float] | None = None
 
 
 class EdexcelParser(BaseParser):
     key = "edexcel"
-    version = "1.0.2"
+    version = "1.1.0"
 
     def __init__(self, config: EdexcelConfig | None = None):
         self.c = config or EdexcelConfig()
@@ -184,6 +187,11 @@ class EdexcelParser(BaseParser):
             top = min(above)
         return max(top - c.pad_above, floor)
 
+    @staticmethod
+    def _is_answer_line(text: str) -> bool:
+        """A line where the student writes: a run of dots, labelled or not ("x = ........")."""
+        return bool(re.search(r"\.{6,}|…{2,}|_{6,}", text))
+
     def _region(self, doc, page: int, y0: float, y1: float) -> Region:
         dx, dy = self._offset(doc[page])
         c = self.c
@@ -284,6 +292,7 @@ class EdexcelParser(BaseParser):
             leaves: list[_Label] = []
             for lab in labels:
                 if lab.children and all(ch.marks is not None for ch in lab.children):
+                    lab.children[0].start = (lab.page, lab.y0)  # the letter's own text goes with its first roman
                     leaves.extend(lab.children)  # each sub-part carries its own marks
                 else:
                     if lab.children:  # marks given once for the whole letter: fold romans in
@@ -297,20 +306,41 @@ class EdexcelParser(BaseParser):
             if leaves and all(lf.marks is None for lf in leaves):
                 leaves = []
 
+            # A part's box runs from its label to where the next part starts, so its answer space
+            # (dotted lines, working space, graph grids) comes with it — on Physics papers the
+            # marks "(2)" sit ABOVE the answer lines; on Maths B below them. The next part starts
+            # at its label, or earlier at the first real line of text after this part's marks
+            # (new information for the next part); dotted answer lines never start a part.
+            def starts_of(lf: _Label) -> tuple[int, float]:
+                return lf.start or (lf.page, lf.y0)
+
+            def boundary(lf: _Label, nxt_lf: _Label) -> tuple[int, float]:
+                ns = starts_of(nxt_lf)
+                if lf.end and lf.end < ns:
+                    for pg in range(lf.end[0], ns[0] + 1):
+                        for x0, y0, x1, y1, text in lines_by_page.get(pg, []):
+                            if (pg, y0) <= lf.end or (pg, y0) >= ns or x1 < c.crop_x0 or x0 > c.crop_x1:
+                                continue
+                            if self._is_answer_line(text) or re.fullmatch(c.part_marks_pattern, text):
+                                continue
+                            # New information starts at the left margin as a sentence; labels in a
+                            # diagram ("M", "motor") or a table don't.
+                            if x0 > c.letter_x0[1] + 15 or len(text.split()) < 3:
+                                continue
+                            return (pg, y0 - c.pad_above)
+                return (ns[0], ns[1] - c.pad_above)
+
             parts: list[Part] = []
             part_floor = start_pos
             for j, lf in enumerate(leaves):
-                pf = part_floor[1] if part_floor[0] == lf.page else c.content_top
+                pf = part_floor[1] if part_floor[0] == starts_of(lf)[0] else c.content_top
                 if j == 0:
-                    part_start = (lf.page, self._top(lf.page, pf, lf.y0))
+                    sp, sy = starts_of(lf)
+                    part_start = (sp, self._top(sp, pf, sy))
                 else:
-                    # Text between the previous part's marks and this label (e.g. new information
-                    # for part (b)) belongs to this part.
-                    part_start = (lf.page, pf)
-                part_end = lf.end
-                if part_end is None:
-                    following = leaves[j + 1] if j + 1 < len(leaves) else None
-                    part_end = (following.page, following.y0 - c.pad_above) if following else end
+                    part_start = part_floor
+                following = leaves[j + 1] if j + 1 < len(leaves) else None
+                part_end = boundary(lf, following) if following else end
                 regs = self._span(doc, part_start, part_end)
                 part_floor = part_end
                 parts.append(

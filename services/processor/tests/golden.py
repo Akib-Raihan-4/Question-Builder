@@ -15,6 +15,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from parsers import get_parser  # noqa: E402
 
 
+# Question papers with picture-only pages (part of the text is missing), or scans: their questions
+# can't all be found from the text, so they're kept as golden snapshots but not held to
+# "every Total line found".
+PARTIAL = ("2019_Jan_P2_QP", "2019_Jan_P2R_QP", "2019_MayJune_P2R_QP")
+
+
+def sample_pdfs() -> list[Path]:
+    """Question papers in /samples and its subfolders (mark schemes are tested elsewhere)."""
+    if not SAMPLES.exists():
+        return []
+    top = sorted(SAMPLES.glob("*.pdf"))
+    sub = sorted(p for p in SAMPLES.glob("*/*.pdf") if "_QP" in p.name)
+    return top + sub
+
+
 def golden_name(pdf: Path) -> str:
     return re.sub(r"_\d{10,}$", "", pdf.stem) + ".json"
 
@@ -48,7 +63,7 @@ if __name__ == "__main__":
     if "--update" not in sys.argv:
         sys.exit("usage: python tests/golden.py --update")
     GOLDEN.mkdir(parents=True, exist_ok=True)
-    for pdf in sorted(SAMPLES.glob("*.pdf")):
+    for pdf in sample_pdfs():
         out = GOLDEN / golden_name(pdf)
         out.write_text(json.dumps(snapshot(pdf), indent=1) + "\n")
         print("wrote", out.name)

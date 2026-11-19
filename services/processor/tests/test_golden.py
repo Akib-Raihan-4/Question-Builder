@@ -2,9 +2,10 @@ import json
 
 import pytest
 
-from tests.golden import GOLDEN, SAMPLES, golden_name, snapshot
+from tests.golden import GOLDEN, PARTIAL, golden_name, sample_pdfs, snapshot
 
-PDFS = sorted(SAMPLES.glob("*.pdf")) if SAMPLES.exists() else []
+PDFS = sample_pdfs()
+COMPLETE = [p for p in PDFS if not any(k in p.name for k in PARTIAL)]
 
 
 @pytest.mark.skipif(not PDFS, reason="no real papers in /samples (they are not committed)")
@@ -27,8 +28,8 @@ def test_matches_golden(pdf):
     assert actual == expected
 
 
-@pytest.mark.skipif(not PDFS, reason="no real papers in /samples")
-@pytest.mark.parametrize("pdf", PDFS, ids=lambda p: p.stem[:40])
+@pytest.mark.skipif(not COMPLETE, reason="no real papers in /samples")
+@pytest.mark.parametrize("pdf", COMPLETE, ids=lambda p: p.stem[:40])
 def test_phase3_done_when(pdf):
     """Every question number found in sequence, totals present, and part marks add up."""
     s = snapshot(pdf)
