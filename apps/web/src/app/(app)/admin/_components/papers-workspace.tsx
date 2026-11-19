@@ -9,6 +9,7 @@ import { PapersTable, type PaperRow } from "./papers-table";
 import { UploadPanel, type Subject } from "./upload-panel";
 import { Select } from "@/components/ui/select";
 import { MsReviewBanner } from "./ms-review-banner";
+import { ProcessorStatus } from "./processor-status";
 
 /** Past papers, one tab per subject/level (e.g. "Mathematics B · International GCSE", "Physics Unit 3 · International A Level"). */
 export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows: (PaperRow & { subjectId: string })[] }) {
@@ -60,6 +61,9 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
         <Button variant="ghost" onClick={() => setAdding((a) => !a)}>
           {adding ? "Cancel" : "+ Add subject"}
         </Button>
+        <div className="ml-auto">
+          <ProcessorStatus />
+        </div>
       </div>
 
       {adding && <AddSubject onAdded={(id) => { setAdding(false); router.refresh(); select(id); }} />}
