@@ -9,6 +9,7 @@ import { PapersTable, type PaperRow } from "./papers-table";
 import { UploadPanel, type Subject } from "./upload-panel";
 import { Select } from "@/components/ui/select";
 import { MsReviewBanner } from "./ms-review-banner";
+import { toast } from "@/components/feedback";
 import { ProcessorStatus } from "./processor-status";
 
 /** Past papers, one tab per subject/level (e.g. "Mathematics B · International GCSE", "Physics Unit 3 · International A Level"). */
@@ -110,6 +111,7 @@ function SubjectForm({ subject, onDone }: { subject?: Subject; onDone: (id: stri
         const body = await res.json().catch(() => ({}));
         setBusy(false);
         if (!res.ok) return setError(body.error ?? (editing ? "Could not save the subject" : "Could not add the subject"));
+        if (body.moved) toast(`Moved ${body.moved} paper${body.moved === 1 ? "" : "s"} into ${body.name}`);
         onDone(body.id);
       }}
     >
@@ -119,6 +121,7 @@ function SubjectForm({ subject, onDone }: { subject?: Subject; onDone: (id: stri
         ) : (
           <>
             Add a subject or an A-level unit. Papers whose code starts with the spec code (e.g. <b>WPH14</b>/01) are matched to it automatically.
+            To give one paper its own tab, put the paper in the spec code: <b>4MB1/02</b> takes Maths B Paper 2 and 2R (already uploaded ones move too).
           </>
         )}
       </p>
@@ -129,7 +132,7 @@ function SubjectForm({ subject, onDone }: { subject?: Subject; onDone: (id: stri
         options={["International A Level", "International GCSE", "A Level", "GCSE", "O Level"].map((q) => ({ value: q, label: q }))}
       />
       <Input placeholder="Name, e.g. Physics Unit 4" value={name} onChange={(e) => setName(e.target.value)} required aria-label="Subject name" />
-      <Input placeholder="Spec code, e.g. WPH14" value={specCode} onChange={(e) => setSpecCode(e.target.value.toUpperCase())} required aria-label="Spec code" />
+      <Input placeholder="Spec code, e.g. WPH14 or 4MB1/02" value={specCode} onChange={(e) => setSpecCode(e.target.value.toUpperCase())} required aria-label="Spec code" />
       <Button type="submit" disabled={busy}>{busy ? "Saving…" : editing ? "Save" : "Add subject"}</Button>
       {error && <p className="text-sm text-destructive sm:col-span-4">{error}</p>}
     </form>

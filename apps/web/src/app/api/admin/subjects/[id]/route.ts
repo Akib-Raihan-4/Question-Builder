@@ -3,11 +3,13 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
+import { SPEC_CODE_RE } from "@/lib/papers/match";
+import { reassignPapers } from "@/lib/papers/reassign";
 
 const Body = z.object({
   qualification: z.string().trim().min(2).max(60),
   name: z.string().trim().min(2).max(80),
-  specCode: z.string().trim().toUpperCase().regex(/^[0-9A-Z]{3,8}$/, "Spec code: letters and digits, e.g. WPH13"),
+  specCode: z.string().trim().toUpperCase().regex(SPEC_CODE_RE, "Spec code: e.g. WPH13, or 4MB1/02 for one paper of a subject"),
 });
 
 /** Rename a subject (name, level, spec code). Its papers stay with it. */
@@ -23,5 +25,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .where(and(eq(schema.subjects.specCode, parsed.data.specCode), ne(schema.subjects.id, id)));
   if (clash) return NextResponse.json({ error: `Another subject already uses ${parsed.data.specCode}` }, { status: 409 });
   const [row] = await db.update(schema.subjects).set(parsed.data).where(eq(schema.subjects.id, id)).returning();
-  return row ? NextResponse.json(row) : NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ...row, moved: await reassignPapers() });
 }
