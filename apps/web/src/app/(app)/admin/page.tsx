@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/session";
 import { Suspense } from "react";
 import { PapersWorkspace } from "./_components/papers-workspace";
+import type { PaperRow } from "./_components/papers-table";
 import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function AdminPage() {
       originalFilename: schema.papers.originalFilename,
       createdAt: schema.papers.createdAt,
       questionCount: sql<number>`(select count(*)::int from ${schema.questions} q where q.paper_id = ${schema.papers.id})`,
+      msStatus: sql<PaperRow["msStatus"]>`(select m.status from mark_schemes m where m.paper_id = ${schema.papers.id})`,
     })
     .from(schema.papers)
     .innerJoin(schema.subjects, eq(schema.subjects.id, schema.papers.subjectId))

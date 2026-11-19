@@ -23,7 +23,25 @@ export type PaperRow = {
   originalFilename: string | null;
   createdAt: Date;
   questionCount: number;
+  /** The paper's mark scheme status, or null when none is uploaded. */
+  msStatus: PaperRow["status"] | null;
 };
+
+const MS: Record<PaperRow["status"], { label: string; cls: string }> = {
+  uploaded: { label: "Uploaded", cls: "text-zinc-600" },
+  processing: { label: "Reading…", cls: "text-sky-700" },
+  needs_review: { label: "To review", cls: "text-amber-700" },
+  published: { label: "✓ Published", cls: "text-emerald-700" },
+  failed: { label: "Failed", cls: "text-red-700" },
+};
+
+function MsLink({ r }: { r: PaperRow }) {
+  return (
+    <Link href={`/admin/papers/${r.id}/mark-scheme`} className={cn("text-xs hover:underline", r.msStatus ? MS[r.msStatus].cls : "text-muted-foreground")}>
+      {r.msStatus ? MS[r.msStatus].label : "+ Add"}
+    </Link>
+  );
+}
 
 const STATUS: Record<PaperRow["status"], { label: string; cls: string }> = {
   uploaded: { label: "Uploaded", cls: "bg-zinc-100 text-zinc-700" },
@@ -146,6 +164,9 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
               <Badge className={cn("shrink-0", STATUS[r.status].cls)}>{STATUS[r.status].label}</Badge>
             </div>
             {r.statusReason && <p className="mt-1.5 text-xs text-muted-foreground">{r.statusReason}</p>}
+            <div className="mt-1.5 text-xs text-muted-foreground">
+              Mark scheme: <MsLink r={r} />
+            </div>
             <div className="mt-2 flex flex-wrap gap-1">{actions(r)}</div>
           </li>
         ))}
@@ -159,7 +180,7 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
               <th className="px-4 py-2.5 font-medium">Paper</th>
               <th className="px-4 py-2.5 font-medium">Series</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
-              <th className="px-4 py-2.5 text-right font-medium">Pages</th>
+              <th className="px-4 py-2.5 font-medium">Mark scheme</th>
               <th className="px-4 py-2.5 text-right font-medium">Questions</th>
               <th className="px-4 py-2.5"><span className="sr-only">Actions</span></th>
             </tr>
@@ -178,7 +199,9 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
                   <Badge className={STATUS[r.status].cls}>{STATUS[r.status].label}</Badge>
                   {r.statusReason && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{r.statusReason}</p>}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.pageCount ?? "–"}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <MsLink r={r} />
+                </td>
                 <td className="px-4 py-3 text-right tabular-nums">{r.questionCount}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">{actions(r)}</div>

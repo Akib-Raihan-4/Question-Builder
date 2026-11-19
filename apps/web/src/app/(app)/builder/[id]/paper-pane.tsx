@@ -242,6 +242,11 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
         <span className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
           {q.paperLabel} · Q{q.number}
           {parts.length ? parts.map((p) => `(${p.label})`).join("") : ""}
+          {q.hasMarkScheme && (
+            <span className="ml-1.5 rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-700" title="Has a mark scheme">
+              MS
+            </span>
+          )}
         </span>
         <AnswerSpaceMenu item={item} number={number} />
         <MoveControls index={index} count={count} />

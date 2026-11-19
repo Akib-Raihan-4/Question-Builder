@@ -10,6 +10,7 @@ from docx_export import DocxSpec, build_docx
 from parsers import PARSERS, get_parser
 from parsers.base import SegmentResult
 from page_layout import LayoutResult, paper_layout
+from ms_reader import MsResult, read_mark_scheme
 
 def require_key(x_processor_key: str | None = Header(default=None)) -> None:
     """When PROCESSOR_KEY is set (always, when hosted), every call except /health must send it.
@@ -37,6 +38,15 @@ async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) 
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return parser.segment(data)
+
+
+@app.post("/segment/ms", response_model=MsResult, dependencies=[Depends(require_key)])
+async def segment_ms(file: UploadFile = File(...)) -> MsResult:
+    """Rows of a mark scheme (one per question part) as regions on the mark scheme PDF."""
+    data = await file.read()
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, "Not a PDF")
+    return read_mark_scheme(data)
 
 
 @app.post("/layout", response_model=LayoutResult, dependencies=[Depends(require_key)])

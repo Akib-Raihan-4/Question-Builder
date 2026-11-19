@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { processorFetch } from "@/lib/processor";
 import { saveLayout } from "@/lib/papers/layout";
+import { readMarkScheme } from "@/lib/mark-schemes/server";
 import { getObjectBytes } from "@/lib/storage";
 
 /** JSON contract returned by services/processor (POST /segment/qp). Coordinates: PDF pt, top-left. */
@@ -208,5 +209,8 @@ export async function runSegmentPaper(paperId: string) {
   const result = await callProcessor(paper.parserKey, pdf);
   await saveSegmentResult(paperId, result);
   await saveLayout(paperId, pdf);
+  // Questions may have been replaced: link the mark scheme's rows to them again.
+  const [ms] = await db.select({ id: schema.markSchemes.id }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, paperId));
+  if (ms) await readMarkScheme(paperId).catch((e) => console.error(`[mark-scheme] relink ${paperId}: ${(e as Error).message}`));
   return { questions: result.questions.length, status: result.status };
 }

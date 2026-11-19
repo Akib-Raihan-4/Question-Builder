@@ -40,6 +40,8 @@ export function BuilderScreen({ paper, sources }: Props) {
     }
   }
   const itemCount = useBuilder((st) => st.items.length);
+  // How many of the paper's questions have a published mark scheme.
+  const msCount = useBuilder((st) => st.items.filter((i) => st.bank[i.questionId]?.hasMarkScheme).length);
   const marks = useBuilder((st) => totalMarks(st.items, st.bank));
   const target = useBuilder((st) => st.header.targetMarks);
 
@@ -211,6 +213,29 @@ export function BuilderScreen({ paper, sources }: Props) {
                       void exportAs(query);
                     }}
                     className="block w-full px-3 py-2.5 text-left hover:bg-muted"
+                  >
+                    <span className="font-medium">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{hint}</span>
+                  </button>
+                ))}
+                <div className="border-t bg-muted/30 px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                  Mark scheme {msCount < itemCount && `(${msCount} of ${itemCount} questions have one)`}
+                </div>
+                {(
+                  [
+                    ["format=ms", "Mark scheme (PDF)", "Renumbered to match your paper, with question and paper totals."],
+                    ["format=pdf&ms=1", "Paper + mark scheme (PDF)", "One file: the paper, then its mark scheme."],
+                  ] as const
+                ).map(([query, label, hint]) => (
+                  <button
+                    key={query}
+                    disabled={msCount === 0}
+                    title={msCount === 0 ? "None of these questions has a published mark scheme yet" : undefined}
+                    onClick={() => {
+                      setMenu(false);
+                      void exportAs(query);
+                    }}
+                    className="block w-full px-3 py-2.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                   >
                     <span className="font-medium">{label}</span>
                     <span className="block text-xs text-muted-foreground">{hint}</span>

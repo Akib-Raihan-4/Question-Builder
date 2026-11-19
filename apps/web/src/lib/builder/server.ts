@@ -66,6 +66,16 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
         .where(inArray(schema.papers.id, [...new Set(qs.map((x) => x.p.id))]))
     ).map((x) => [x.id, x.layout]),
   );
+  // Questions with rows in a published mark scheme.
+  const withMs = new Set(
+    (
+      await db
+        .selectDistinct({ id: schema.msRegions.questionId })
+        .from(schema.msRegions)
+        .innerJoin(schema.markSchemes, eq(schema.markSchemes.id, schema.msRegions.markSchemeId))
+        .where(and(inArray(schema.msRegions.questionId, qIds), eq(schema.markSchemes.status, "published")))
+    ).map((r) => r.id),
+  );
   const paperOf = new Map<string, string>(qs.map((x) => [x.q.id, x.p.id]));
   for (const pt of parts) paperOf.set(pt.id, paperOf.get(pt.questionId)!);
   const reg = (ownerId: string) =>
@@ -82,6 +92,7 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
     paperLabel: paperLabel(p),
     number: q.number,
     totalMarks: q.totalMarks,
+    hasMarkScheme: withMs.has(q.id),
     regions: reg(q.id),
     parts: parts
       .filter((pt) => pt.questionId === q.id)

@@ -84,7 +84,9 @@ export async function createPaper(input: NewPaperInput): Promise<CreateResult> {
 export async function deletePaper(id: string) {
   const [paper] = await db.select().from(schema.papers).where(eq(schema.papers.id, id));
   if (!paper) return false;
+  const [ms] = await db.select({ fileKey: schema.markSchemes.fileKey }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, id));
   await db.delete(schema.papers).where(eq(schema.papers.id, id));
   await deleteObject(paper.fileKey).catch((e) => console.error("[storage] delete failed", e));
+  if (ms) await deleteObject(ms.fileKey).catch((e) => console.error("[storage] delete failed", e));
   return true;
 }

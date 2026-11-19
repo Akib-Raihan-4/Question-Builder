@@ -19,6 +19,8 @@ export type BankQuestion = {
   totalMarks: number;
   regions: Region[];
   parts: BankPart[];
+  /** A published mark scheme has rows for this question (teachers can export it). */
+  hasMarkScheme?: boolean;
 };
 
 /** partIds empty = the whole question. */

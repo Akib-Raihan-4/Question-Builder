@@ -44,12 +44,19 @@ function limiter(max: number) {
 const downloads = limiter(3);
 const renders = limiter(2);
 
+/**
+ * A source document: a paper's question paper (its id) or its mark scheme ("ms:<paperId>").
+ * Everything below is keyed by this string.
+ */
+const fileUrl = (key: string) => (key.startsWith("ms:") ? `/api/papers/${key.slice(3)}/mark-scheme` : `/api/papers/${key}/file`);
+export const msDocKey = (paperId: string) => `ms:${paperId}`;
+
 export function getPdfDoc(paperId: string): Promise<PDFDocumentProxy> {
   let p = docs.get(paperId);
   if (!p) {
     p = downloads(async () => {
       const { pdfjs, worker } = await loadPdfjs();
-      const task = pdfjs.getDocument({ url: `/api/papers/${paperId}/file`, withCredentials: true, worker });
+      const task = pdfjs.getDocument({ url: fileUrl(paperId), withCredentials: true, worker });
       task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
         const f = total ? Math.min(1, loaded / total) : null;
         lastProgress.set(paperId, f);

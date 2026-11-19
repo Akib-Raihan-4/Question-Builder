@@ -253,6 +253,56 @@ export const questionTopics = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* Mark schemes: one per paper; rows stored as regions on the MS PDF    */
+/* ------------------------------------------------------------------ */
+
+export const markSchemes = pgTable("mark_schemes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paperId: uuid("paper_id")
+    .notNull()
+    .unique()
+    .references(() => papers.id, { onDelete: "cascade" }),
+  fileKey: text("file_key").notNull(),
+  originalFilename: text("original_filename"),
+  fileSize: integer("file_size"),
+  pageCount: integer("page_count"),
+  /** uploaded → processing → needs_review → published / failed (same as papers). */
+  status: paperStatus("status").notNull().default("uploaded"),
+  statusReason: text("status_reason"),
+  readerVersion: text("reader_version"),
+  publishedAt: timestamp("published_at"),
+  uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * One box of one mark scheme row. A row ("1(a)(i)") may span pages, so it can have several
+ * boxes (same label, increasing sort_order). question_id/part_id say which part it marks;
+ * part_id null = the whole question. Rows the reader couldn't link have question_id null.
+ */
+export const msRegions = pgTable(
+  "ms_regions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    markSchemeId: uuid("mark_scheme_id")
+      .notNull()
+      .references(() => markSchemes.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id").references(() => questions.id, { onDelete: "set null" }),
+    partId: uuid("part_id").references(() => questionParts.id, { onDelete: "set null" }),
+    label: text("label").notNull(), // as printed: "1(a)(i)"
+    page: integer("page").notNull(),
+    x0: real("x0").notNull(),
+    y0: real("y0").notNull(),
+    x1: real("x1").notNull(),
+    y1: real("y1").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    editedByAdmin: boolean("edited_by_admin").notNull().default(false),
+  },
+  (t) => [index("ms_regions_scheme_idx").on(t.markSchemeId), index("ms_regions_question_idx").on(t.questionId)],
+);
+
+/* ------------------------------------------------------------------ */
 /* A teacher's school branding (logo, watermark), used on their papers  */
 /* ------------------------------------------------------------------ */
 

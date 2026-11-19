@@ -231,6 +231,12 @@ go to the TEST branch first, then `npm run db:migrate` against production before
   "Add 6 lines" adds 6 lines above "(Total for Question 1 …)".
 
 ### C. Mark schemes
+
+**Status (19 Nov 2026):** steps 1–3 done for Physics Unit 3 — all 17 sample mark schemes that have a
+question paper read with every row linked (`services/processor/ms_reader.py`, `/segment/ms`); admin page
+`/admin/papers/<id>/mark-scheme` (upload, re-read, link fixes, publish); export "Mark scheme (PDF)" and
+"Paper + mark scheme (PDF)". Still to do: Maths B reader tuning (step 4), bulk mark scheme upload
+matched by cover, drawing/moving row boxes by hand, Word export of mark schemes.
 Mark schemes are tables (Question Number | Answer | Guidance | Mark), one row per part, labelled
 `1(a)(i)` — matching our part labels (`a(i)`). Same core idea as questions: rows are stored as
 regions on the original MS PDF, never as text or images.
