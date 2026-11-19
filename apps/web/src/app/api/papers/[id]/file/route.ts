@@ -19,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return new Response(body, {
     headers: {
       "Content-Type": "application/pdf",
-      ...(length ? { "Content-Length": String(length) } : {}),
+      // Streamed responses can lose Content-Length on the way, so the size also goes in a header
+      // of our own: the app uses it to show real download progress.
+      ...(length ? { "Content-Length": String(length), "X-File-Size": String(length) } : {}),
       "Content-Disposition": `inline; filename="${paper.paperCode.replace("/", "-")}_${paper.series}_${paper.year}.pdf"`,
       "Cache-Control": "private, max-age=3600", // this browser only; never shared caches
       "X-Robots-Tag": "noindex",

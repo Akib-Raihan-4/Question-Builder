@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePdf } from "@/components/pdf/use-pdf";
+import { useCachedPdf } from "@/components/pdf/pdf-cache";
 import { PdfPageCanvas } from "@/components/pdf/pdf-page-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-  const { doc, error } = usePdf(`/api/papers/${initial.paper.id}/file`);
+  const { doc, error, fraction } = useCachedPdf(initial.paper.id);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewerWidth, setViewerWidth] = useState(760);
   const [pageSizes, setPageSizes] = useState<{ w: number; h: number }[]>([]);
@@ -371,7 +371,17 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             Boxes marked ✎ were edited by hand and are kept when the parser re-runs.
           </details>
           {error && <p className="text-sm text-destructive">Could not load the PDF: {error}</p>}
-          {!doc && !error && <p className="text-sm text-muted-foreground">Loading PDF…</p>}
+          {!doc && !error && (
+            <div className="mx-auto max-w-3xl rounded-lg bg-background/80 px-3 py-2 text-sm text-muted-foreground" role="status">
+              {fraction != null ? `Loading the paper… ${Math.round(fraction * 100)}%` : "Loading the paper…"}
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200">
+                <div
+                  className={cn("h-full rounded-full bg-primary transition-[width]", fraction == null && "w-1/3 animate-pulse")}
+                  style={fraction != null ? { width: `${Math.max(4, fraction * 100)}%` } : undefined}
+                />
+              </div>
+            </div>
+          )}
           {doc &&
             pageSizes.map((size, i) => {
               const scale = scaleFor(i);

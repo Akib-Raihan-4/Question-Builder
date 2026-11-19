@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { loadPdfjs } from "./use-pdf";
 
@@ -51,18 +52,44 @@ const renders = limiter(2);
 const fileUrl = (key: string) => (key.startsWith("ms:") ? `/api/papers/${key.slice(3)}/mark-scheme` : `/api/papers/${key}/file`);
 export const msDocKey = (paperId: string) => `ms:${paperId}`;
 
+/** Fetch a file, reporting progress 0–1 (null while the size is unknown). */
+async function download(url: string, onProgress: (fraction: number | null) => void): Promise<Uint8Array> {
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`Couldn't load the paper (${res.status})`);
+  const total = Number(res.headers.get("x-file-size") || res.headers.get("content-length") || 0);
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  onProgress(total ? 0 : null);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    onProgress(total ? Math.min(1, loaded / total) : null);
+  }
+  const out = new Uint8Array(loaded);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
 export function getPdfDoc(paperId: string): Promise<PDFDocumentProxy> {
   let p = docs.get(paperId);
   if (!p) {
     p = downloads(async () => {
       const { pdfjs, worker } = await loadPdfjs();
-      const task = pdfjs.getDocument({ url: fileUrl(paperId), withCredentials: true, worker });
-      task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
-        const f = total ? Math.min(1, loaded / total) : null;
+      // Download it ourselves so progress is real (counted against the size the server sends),
+      // then hand the bytes to pdf.js.
+      const data = await download(fileUrl(paperId), (f) => {
         lastProgress.set(paperId, f);
         progress.get(paperId)?.forEach((cb) => cb(f));
-      };
-      return task.promise;
+      });
+      return pdfjs.getDocument({ data, worker }).promise;
     });
     p.catch(() => docs.delete(paperId)).finally(() => lastProgress.delete(paperId));
     docs.set(paperId, p);
@@ -121,4 +148,22 @@ export function getPageText(paperId: string, page: number): Promise<PageWord[]> 
     texts.set(key, p);
   }
   return p;
+}
+
+/** React hook: a source document from the cache, with its real download progress. */
+export function useCachedPdf(key: string) {
+  const [state, setState] = useState<{ doc: PDFDocumentProxy | null; error: string | null; fraction: number | null }>({ doc: null, error: null, fraction: null });
+  useEffect(() => {
+    let stop = false;
+    setState({ doc: null, error: null, fraction: null });
+    const off = onPdfProgress(key, (fraction) => !stop && setState((s) => (s.doc ? s : { ...s, fraction })));
+    getPdfDoc(key)
+      .then((doc) => !stop && setState({ doc, error: null, fraction: 1 }))
+      .catch((e) => !stop && setState({ doc: null, error: String(e?.message ?? e), fraction: null }));
+    return () => {
+      stop = true;
+      off();
+    };
+  }, [key]);
+  return state;
 }
