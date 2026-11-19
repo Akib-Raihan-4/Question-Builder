@@ -11,7 +11,10 @@ Regions are PDF points, top-left origin (PyMuPDF native), 0-based pages — the 
 """
 from __future__ import annotations
 
+import contextvars
+import copy
 import io
+import math
 import re
 from dataclasses import dataclass
 
@@ -58,12 +61,24 @@ class XHeader(BaseModel):
     instructions: str | None = None
 
 
+class XWatermark(BaseModel):
+    text: str | None = None
+    logo: bool = False  # the faded logo comes as the file "watermark_logo"
+    opacity: float = 0.08
+
+
 class DocxSpec(BaseModel):
     title: str
     header: XHeader
     mode: str = "pictures"  # "pictures" | "editable"
     total_marks: int
     items: list[XItem]
+    watermark: XWatermark | None = None
+
+
+# With a watermark, question pictures are drawn with a see-through background so it shows
+# behind them (the source pages don't paint white).
+_TRANSPARENT: contextvars.ContextVar[bool] = contextvars.ContextVar("transparent", default=False)
 
 
 # ---------------------------------------------------------------------------- helpers
@@ -116,7 +131,7 @@ def _para(container, text: str = "", *, bold=False, size=11, align=None, space_a
 
 
 def _picture(container, page: pymupdf.Page, rect: pymupdf.Rect, scale: float, space_before: float = 0.0):
-    pix = page.get_pixmap(clip=rect, dpi=DPI)
+    pix = page.get_pixmap(clip=rect, dpi=DPI, alpha=_TRANSPARENT.get())
     p = container.add_paragraph()
     p.paragraph_format.space_before = Pt(space_before)
     p.paragraph_format.space_after = Pt(0)
@@ -258,10 +273,100 @@ def _editable_region(cell, page: pymupdf.Page, rect: pymupdf.Rect, scale: float,
         p.paragraph_format.space_after = Pt(0)
 
 
+# ---------------------------------------------------------------------------- branding
+
+LOGO_MAX_H = 40.0  # pt, same as the PDF
+A4_PT = (595.28, 841.89)
+
+
+def _image_size(data: bytes) -> tuple[int, int]:
+    pix = pymupdf.Pixmap(data)
+    return pix.width, pix.height
+
+
+def _watermark_png(text: str | None, logo: bytes | None, opacity: float, dpi: int = 110) -> bytes | None:
+    """A full A4 page, transparent except for the faint watermark (same size/angle as the PDF)."""
+    W, H = A4_PT
+    doc = pymupdf.open()
+    page = doc.new_page(width=W, height=H)
+    if logo:
+        lw, lh = _image_size(logo)
+        w = W * 0.6
+        h = lh / lw * w
+        page.insert_image(pymupdf.Rect((W - w) / 2, (H - h) / 2, (W + w) / 2, (H + h) / 2), stream=logo)
+    elif text:
+        text = text.upper()
+        font = pymupdf.Font("hebo")
+        size = min(W * 0.13, math.hypot(W, H) * 0.6 / font.text_length(text, fontsize=1))
+        tw = font.text_length(text, fontsize=size)
+        centre = pymupdf.Point(W / 2, H / 2)
+        # Baseline placed so the text's middle is at the centre, then turned 45° (rising to the right).
+        page.insert_text(
+            pymupdf.Point(W / 2 - tw / 2, H / 2 + size * 0.35), text,
+            fontname="hebo", fontsize=size, color=(0, 0, 0), morph=(centre, pymupdf.Matrix(45)),
+        )
+    else:
+        return None
+    pix = page.get_pixmap(dpi=dpi, alpha=True)
+    # The pixels are stored premultiplied (colour already scaled by transparency), so fading means
+    # scaling every channel, not just the alpha.
+    table = bytes(round(v * opacity) for v in range(256))
+    faded = pymupdf.Pixmap(pymupdf.csRGB, pix.width, pix.height, bytes(pix.samples).translate(table), True)
+    return faded.tobytes("png")
+
+
+def _add_watermark(section, png: bytes) -> None:
+    """Put a full-page picture in the page header, behind the text, on every page."""
+    header = section.header
+    p = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    run = p.add_run()
+    run.add_picture(io.BytesIO(png), width=Pt(A4_PT[0]), height=Pt(A4_PT[1]))
+    inline = run._r.find(".//" + qn("wp:inline"))
+    anchor = OxmlElement("wp:anchor")
+    for k, v in {
+        "distT": "0", "distB": "0", "distL": "0", "distR": "0", "simplePos": "0", "relativeHeight": "0",
+        "behindDoc": "1", "locked": "1", "layoutInCell": "1", "allowOverlap": "1",
+    }.items():
+        anchor.set(k, v)
+    simple = OxmlElement("wp:simplePos")
+    simple.set("x", "0")
+    simple.set("y", "0")
+    anchor.append(simple)
+    for tag in ("wp:positionH", "wp:positionV"):
+        pos = OxmlElement(tag)
+        pos.set("relativeFrom", "page")
+        off = OxmlElement("wp:posOffset")
+        off.text = "0"
+        pos.append(off)
+        anchor.append(pos)
+    anchor.append(copy.deepcopy(inline.find(qn("wp:extent"))))
+    effect = OxmlElement("wp:effectExtent")
+    for k in ("l", "t", "r", "b"):
+        effect.set(k, "0")
+    anchor.append(effect)
+    anchor.append(OxmlElement("wp:wrapNone"))
+    for tag in ("wp:docPr", "wp:cNvGraphicFramePr", "a:graphic"):
+        el = inline.find(qn(tag))
+        if el is not None:
+            anchor.append(copy.deepcopy(el))
+    inline.getparent().replace(inline, anchor)
+
+
 # ---------------------------------------------------------------------------- main
 
 
-def build_docx(spec: DocxSpec, pdfs: dict[str, bytes]) -> bytes:
+def build_docx(spec: DocxSpec, pdfs: dict[str, bytes], logo: bytes | None = None,
+               watermark_logo: bytes | None = None) -> bytes:
+    wm = spec.watermark
+    wm_png = _watermark_png(wm.text, watermark_logo if wm.logo else None, wm.opacity) if wm else None
+    token = _TRANSPARENT.set(wm_png is not None)
+    try:
+        return _build(spec, pdfs, logo, wm_png)
+    finally:
+        _TRANSPARENT.reset(token)
+
+
+def _build(spec: DocxSpec, pdfs: dict[str, bytes], logo: bytes | None, wm_png: bytes | None) -> bytes:
     docs = {pid: pymupdf.open(stream=data, filetype="pdf") for pid, data in pdfs.items()}
     doc = Document()
     sec = doc.sections[0]
@@ -272,7 +377,20 @@ def build_docx(spec: DocxSpec, pdfs: dict[str, bytes]) -> bytes:
     normal.font.size = Pt(11)
     normal.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
 
+    if wm_png:
+        _add_watermark(sec, wm_png)
+
     h = spec.header
+    if logo:
+        try:
+            lw, lh = _image_size(logo)
+            scale = min(LOGO_MAX_H / lh, CONTENT_W_PT * 0.4 / lw)
+            lp = doc.add_paragraph()
+            lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            lp.paragraph_format.space_after = Pt(6)
+            lp.add_run().add_picture(io.BytesIO(logo), width=Pt(lw * scale), height=Pt(lh * scale))
+        except Exception:  # noqa: BLE001 — a broken logo never stops the export
+            pass
     if h.school:
         _para(doc, h.school.upper(), bold=True, size=11, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4)
     _para(doc, h.title or spec.title, bold=True, size=16, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4)

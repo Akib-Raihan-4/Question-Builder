@@ -240,12 +240,40 @@ export const questionTopics = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* A teacher's school branding (logo, watermark), used on their papers  */
+/* ------------------------------------------------------------------ */
+
+export type Watermark = {
+  kind: "none" | "school" | "text" | "logo";
+  /** Used when kind = "text". */
+  text?: string;
+  strength: "light" | "medium";
+};
+
+export const userBranding = pgTable("user_branding", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  school: text("school"),
+  /** Private storage key of the logo (PNG or JPEG), or null. */
+  logoKey: text("logo_key"),
+  logoType: text("logo_type"),
+  watermark: jsonb("watermark").$type<Watermark>().notNull().default({ kind: "none", strength: "light" }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/* ------------------------------------------------------------------ */
 /* What teachers build                                                 */
 /* ------------------------------------------------------------------ */
 
 export type PaperHeader = {
   school?: string;
+  /** Unused (logos live in the owner's branding). */
   logoKey?: string;
+  /** Put the owner's school logo above the title (default true when they have one). */
+  showLogo?: boolean;
+  /** Print the owner's watermark on every page (default true when they have one). */
+  showWatermark?: boolean;
   className?: string;
   title?: string;
   timeAllowed?: string;

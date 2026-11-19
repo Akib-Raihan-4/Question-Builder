@@ -64,3 +64,24 @@ def test_endpoint():
     assert r.status_code == 200 and r.content[:2] == b"PK"
     missing = client.post("/export/docx", data={"spec": json.dumps(_spec("pictures").model_dump())})
     assert missing.status_code == 400
+
+
+def _logo() -> bytes:
+    d = pymupdf.open()
+    p = d.new_page(width=120, height=60)
+    p.draw_circle((30, 30), 25, color=(0, 0, 1), fill=(0, 0, 1))
+    return p.get_pixmap(alpha=True).tobytes("png")
+
+
+def test_logo_and_text_watermark():
+    spec = DocxSpec.model_validate({**_spec("pictures").model_dump(), "watermark": {"text": "Greenfield", "opacity": 0.08}})
+    data = build_docx(spec, {"p": _paper()}, logo=_logo())
+    d = docx.Document(io.BytesIO(data))
+    header_xml = d.sections[0].header._element.xml
+    assert "wp:anchor" in header_xml and 'behindDoc="1"' in header_xml  # watermark behind the text
+    assert d.paragraphs[0].runs and d.paragraphs[0]._p.xml.count("<pic:pic") == 1  # logo first
+
+
+def test_no_watermark_by_default():
+    d = docx.Document(io.BytesIO(build_docx(_spec("pictures"), {"p": _paper()})))
+    assert "wp:anchor" not in d.sections[0].header._element.xml

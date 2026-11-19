@@ -21,6 +21,8 @@ const Body = z.object({
     timeAllowed: z.string().max(100).optional(),
     instructions: z.string().max(4000).optional(),
     targetMarks: z.number().int().min(0).max(1000).optional(),
+    showLogo: z.boolean().optional(),
+    showWatermark: z.boolean().optional(),
   }),
   items: z
     .array(z.object({ questionId: z.string().uuid(), partIds: z.array(z.string().uuid()).max(50) }))

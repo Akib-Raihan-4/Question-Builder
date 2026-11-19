@@ -197,3 +197,63 @@ Testing: pytest golden tests (processor); Vitest for store + coords; Playwright 
 
 Risks: older layouts (per-layout parsers + admin fixes), scanned PDFs (mark `failed` with reason),
 cross-part/insert dependencies (warning), copyright (internal only).
+
+## Next features (planned 19 Nov 2026)
+
+Order: **A. School logo + watermark** (small) → **B. Answer space** (medium) → **C. Mark schemes**
+(large, four steps). Each ends with checks at phone/tablet/desktop and a commit; database changes
+go to the TEST branch first, then `npm run db:migrate` against production before deploying.
+
+### A. School logo and watermark
+- **Your account → School branding**: school name, logo (PNG/JPG ≤ 1 MB, re-encoded to PNG, stored
+  privately in B2 under `branding/<userId>/`), watermark (off / school name / custom text / faded
+  logo) and strength. New papers start from these; each paper can switch logo/watermark off.
+- Data: `user.branding` (jsonb); `PaperHeader` gains `showLogo`, `watermark`.
+- PDF: logo above the title (≤ 18 mm high); watermark drawn first on every page so questions sit
+  on top of it (diagonal text or centred faded logo, ~8% grey).
+- DOCX: logo in the header; watermark as a Word header shape (best effort).
+- Done when: a paper exports with logo and watermark in PDF and DOCX, and a paper with them
+  switched off has neither.
+
+### B. Answer space
+- Per question in the builder: **As in the past paper** (default) · **Remove** · **Add lines**
+  (1–30 dotted lines, Edexcel spacing) · **Blank space** (cm). "Apply to all" sets every question.
+- Data: `built_paper_items.answer_space` (jsonb: `{ mode, lines?, cm? }`).
+- **Remove** needs to know where the answer lines are. The processor finds, inside each stored
+  region, bands that are only dotted answer lines or empty space (labelled lines such as
+  "Percentage uncertainty = ......" are kept, and graph grids and tables are never removed) and
+  stores them per region (`regions.answer_bands` jsonb). A one-off backfill runs it for every
+  published paper; re-runs keep it current.
+- Export splits a region around its answer bands; added lines/space go after the question's last
+  region, above its Total line. The same splitting function drives the builder preview, the PDF
+  and both DOCX modes, so they always match.
+- Done when: on WPH13 Jan 2024, Q1 "Remove" drops the dotted lines but keeps the graph in Q4, and
+  "Add 6 lines" adds 6 lines above "(Total for Question 1 …)".
+
+### C. Mark schemes
+Mark schemes are tables (Question Number | Answer | Guidance | Mark), one row per part, labelled
+`1(a)(i)` — matching our part labels (`a(i)`). Same core idea as questions: rows are stored as
+regions on the original MS PDF, never as text or images.
+
+1. **Data + upload + reading** — table `mark_schemes` (paper_id unique, file_key, page_count,
+   status, parser_key, parser_version, status_reason) and `ms_regions` (mark_scheme_id,
+   question_id, part_id null = whole question, label, page, bbox, sort_order, edited_by_admin).
+   Upload on the paper's page ("Mark scheme" tab) or in bulk on Past papers: each file is matched
+   to its paper from its cover ("January 2024", "(WPH13)", "Paper 01"). Processor endpoint
+   `/segment/ms`: find the label column, start a row at each label (`1(a)(i)`, also `1 (a)`),
+   end it at the next label, the table's end or a "Total for question" row; split across pages;
+   crop right of the label column so only answers, guidance and marks remain; skip repeated
+   table headers. Rows are linked to questions/parts by label; unmatched rows are flagged.
+   *Done when:* all 18 Physics Unit 3 mark schemes in `samples/Physics-Unit-3-MS` read with every
+   row linked (17 have a question paper in the test database; October 2020 has none).
+2. **Admin review** — the review screen gets a "Question paper | Mark scheme" switch; the mark
+   scheme side reuses the box editor (draw/move/resize, link a row to a part). Publishing a mark
+   scheme requires every part of every question to have a row. Teachers see only published ones.
+3. **Teacher export** — Export menu gains **Mark scheme (PDF)** (and a combined "Paper + mark
+   scheme"). Layout: our own "Question | Answer | Mark" header, the new label (`3(a)(i)`) drawn
+   in the left column, the crop beside it, "Total for question 3 = 8 marks" after each question
+   and the paper total at the end. Only the parts the teacher picked are included; questions
+   without a mark scheme are listed on a note page instead of failing. DOCX (pictures mode) next.
+   The builder shows a small "MS" badge on questions that have one.
+4. **Maths B mark schemes** — different table (Question | Working | Answer | Mark | Notes); a
+   second parser behind the same interface once sample mark schemes are in `/samples`.

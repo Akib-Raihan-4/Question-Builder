@@ -63,7 +63,11 @@ async def export_docx(request: Request) -> Response:
     missing = {i.paper_id for i in spec.items} - set(pdfs)
     if missing:
         raise HTTPException(400, f"Missing PDFs for {sorted(missing)}")
-    data = build_docx(spec, pdfs)
+    async def file_bytes(name: str) -> bytes | None:
+        f = form.get(name)
+        return await f.read() if f is not None and hasattr(f, "read") else None
+
+    data = build_docx(spec, pdfs, logo=await file_bytes("logo"), watermark_logo=await file_bytes("watermark_logo"))
     return Response(
         data,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

@@ -1,6 +1,7 @@
 import type { PaperHeader } from "@/db/schema";
 import { itemMarks, itemRegions, totalMarks, type Bank, type Item } from "@/lib/builder/model";
 import { processorFetch } from "@/lib/processor";
+import type { ExportBranding } from "@/lib/watermark";
 
 export type DocxMode = "pictures" | "editable";
 
@@ -15,6 +16,7 @@ export async function buildPaperDocx(input: {
   bank: Bank;
   mode: DocxMode;
   loadSource: (paperId: string) => Promise<Uint8Array>;
+  branding?: ExportBranding;
 }): Promise<Uint8Array> {
   const { items, bank } = input;
   const spec = {
@@ -27,6 +29,10 @@ export async function buildPaperDocx(input: {
       instructions: input.header.instructions,
     },
     mode: input.mode,
+    // The images themselves are sent as files "logo" and "watermark_logo".
+    watermark: input.branding?.watermark
+      ? { text: input.branding.watermark.text, logo: Boolean(input.branding.watermark.logo), opacity: input.branding.watermark.opacity }
+      : null,
     total_marks: totalMarks(items, bank),
     items: items.map((it, i) => ({
       number: i + 1, // serial = position + 1, never stored
@@ -41,6 +47,9 @@ export async function buildPaperDocx(input: {
     const bytes = await input.loadSource(paperId);
     form.append(`pdf_${paperId}`, new Blob([bytes as BlobPart], { type: "application/pdf" }), `${paperId}.pdf`);
   }
+  const b = input.branding;
+  if (b?.logo) form.append("logo", new Blob([b.logo.bytes as BlobPart], { type: b.logo.type }), "logo");
+  if (b?.watermark?.logo) form.append("watermark_logo", new Blob([b.watermark.logo.bytes as BlobPart], { type: b.watermark.logo.type }), "watermark_logo");
   const res = await processorFetch("/export/docx", { method: "POST", body: form });
   if (!res.ok) throw new Error(`Word export failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   return new Uint8Array(await res.arrayBuffer());

@@ -8,6 +8,9 @@ import { CropCanvas } from "@/components/pdf/crop-canvas";
 import { chosenParts, dependencyWarnings, itemMarks, itemRegions, totalMarks, type Item } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { logoUrl, useBranding, type ClientBranding } from "@/components/use-branding";
+import { watermarkOpacity, watermarkText } from "@/lib/watermark";
 
 const A4_W = 595.28;
 
@@ -24,6 +27,8 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
   const [sheetWidth, setSheetWidth] = useState(520);
   const total = totalMarks(items, bank);
   const target = header.targetMarks;
+  const branding = useBranding();
+  const showLogo = Boolean(branding?.hasLogo) && header.showLogo !== false;
   const sensors = useSensors(
     // Mouse: drag after moving 4px. Touch: press and hold briefly, so scrolling still works.
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -139,6 +144,7 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
               onChange={(e) => setHeader({ instructions: e.target.value })}
               className="col-span-2 h-16 rounded-md border px-2 py-1"
             />
+            <BrandingSwitches branding={branding} />
           </div>
         )}
       </div>
@@ -171,8 +177,13 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
       )}
 
       <div className={cn("min-h-0 flex-1 overflow-y-auto bg-zinc-100 p-4", view !== "preview" && "hidden")}>
-        <div ref={sheetRef} className="mx-auto w-full max-w-[620px] bg-white px-0 pb-8 shadow-sm ring-1 ring-black/5">
+        <div ref={sheetRef} className="relative mx-auto w-full max-w-[620px] bg-white px-0 pb-8 shadow-sm ring-1 ring-black/5">
+          {branding && header.showWatermark !== false && <PreviewWatermark branding={branding} school={header.school} width={sheetWidth} />}
           <div className="border-b px-6 pb-4 pt-6 text-center">
+            {showLogo && branding && (
+              // eslint-disable-next-line @next/next/no-img-element -- private, signed-in image
+              <img src={logoUrl(branding)} alt="School logo" className="mx-auto mb-2 max-h-12 max-w-[40%] object-contain" />
+            )}
             {header.school && <div className="text-sm font-semibold uppercase tracking-wide">{header.school}</div>}
             <div className="text-lg font-bold">{header.title || title}</div>
             <div className="mt-1 flex justify-center gap-4 text-xs text-zinc-600">
@@ -335,5 +346,80 @@ function OutlineRow({ item, index, count, onOpen }: { item: Item; index: number;
         ✕
       </button>
     </li>
+  );
+}
+
+
+/** Logo / watermark switches for this paper, set up once under Your account → School branding. */
+function BrandingSwitches({ branding }: { branding: ClientBranding | null }) {
+  const header = useBuilder((s) => s.header);
+  const { setHeader } = useBuilder.getState();
+  if (!branding) return null;
+  const hasWatermark = branding.watermark.kind !== "none";
+  if (!branding.hasLogo && !hasWatermark) {
+    return (
+      <p className="col-span-2 text-xs text-muted-foreground">
+        Add your school logo or a watermark in{" "}
+        <Link href="/account#branding" className="underline underline-offset-2 hover:text-foreground">
+          Your account
+        </Link>
+        .
+      </p>
+    );
+  }
+  return (
+    <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      {branding.hasLogo && (
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={header.showLogo !== false} onChange={(e) => setHeader({ showLogo: e.target.checked })} />
+          School logo
+        </label>
+      )}
+      {hasWatermark && (
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={header.showWatermark !== false} onChange={(e) => setHeader({ showWatermark: e.target.checked })} />
+          Watermark
+        </label>
+      )}
+      <Link href="/account#branding" className="text-muted-foreground underline underline-offset-2 hover:text-foreground">
+        Change
+      </Link>
+    </div>
+  );
+}
+
+/** The watermark repeated once per A4 page down the preview, as it will print. */
+function PreviewWatermark({ branding, school, width }: { branding: ClientBranding; school?: string; width: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const el = ref.current?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeight(el.scrollHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const w = branding.watermark;
+  const text = watermarkText(w, school || branding.school);
+  const logo = w.kind === "logo" && branding.hasLogo;
+  if (w.kind === "none" || (!text && !logo)) return <div ref={ref} hidden />;
+  const pageH = width * (297 / 210);
+  const pages = Math.max(1, Math.ceil(height / pageH));
+  const fontSize = text ? Math.min(width * 0.13, (Math.hypot(width, pageH) * 0.6) / (text.length * 0.72)) : 0;
+  return (
+    <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-hidden mix-blend-multiply" style={{ opacity: watermarkOpacity(w) }}>
+      {Array.from({ length: pages }, (_, i) => (
+        <div key={i} className="absolute inset-x-0 flex items-center justify-center" style={{ top: i * pageH, height: pageH }}>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl(branding)} alt="" className="w-3/5 object-contain" />
+          ) : (
+            <span className="-rotate-45 whitespace-nowrap font-sans font-bold uppercase text-black" style={{ fontSize }}>
+              {text}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

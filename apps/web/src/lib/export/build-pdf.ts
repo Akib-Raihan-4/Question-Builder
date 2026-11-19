@@ -1,8 +1,18 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { BlendMode, PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { PaperHeader } from "@/db/schema";
 import { pdfToPdfLib, topDownToPdfLibY } from "@/lib/coords";
 import { itemMarks, itemRegions, totalMarks, type Bank, type Item } from "@/lib/builder/model";
 import { A4, DEFAULT_LAYOUT, layoutPaper } from "./layout";
+import type { ExportBranding, LogoImage } from "@/lib/watermark";
+import { fadePngToWhite } from "./fade-png";
+
+async function embedLogo(out: PDFDocument, img: LogoImage): Promise<PDFImage | null> {
+  try {
+    return img.type === "image/png" ? await out.embedPng(img.bytes) : await out.embedJpg(img.bytes);
+  } catch {
+    return null; // a broken image never stops the export
+  }
+}
 
 export type ExportInput = {
   title: string;
@@ -11,7 +21,40 @@ export type ExportInput = {
   bank: Bank;
   /** Original PDF bytes for a source paper. */
   loadSource: (paperId: string) => Promise<Uint8Array>;
+  /** The owner's school logo and watermark, already filtered by the paper's switches. */
+  branding?: ExportBranding;
 };
+
+
+const LOGO_MAX_H = 40; // pt (~14 mm)
+const LOGO_GAP = 8;
+
+/**
+ * Faint watermark across the page, drawn ON TOP of the questions with "multiply" blending so it
+ * shows even on pages that paint a white background, while the text underneath stays readable.
+ */
+function drawWatermark(page: PDFPage, wm: NonNullable<ExportBranding["watermark"]>, font: PDFFont, logo: PDFImage | null) {
+  const { width: W, height: H } = page.getSize();
+  if (logo) {
+    const w = W * 0.6;
+    const h = (logo.height / logo.width) * w;
+    // A PNG logo arrives already faded (see fadePngToWhite); a JPEG relies on the opacity setting.
+    const opacity = wm.logo?.type === "image/png" ? 1 : wm.opacity;
+    page.drawImage(logo, { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h, opacity, blendMode: BlendMode.Multiply });
+    return;
+  }
+  if (!wm.text) return;
+  const text = safe(wm.text.toUpperCase(), font);
+  // Fill ~60% of the page diagonal, never huge (the builder preview uses the same rule).
+  const size = Math.min(W * 0.13, (Math.hypot(W, H) * 0.6) / font.widthOfTextAtSize(text, 1));
+  const tw = font.widthOfTextAtSize(text, size);
+  const th = font.heightAtSize(size, { descender: false });
+  const a = Math.PI / 4;
+  // Rotate about the text's own centre, placed at the page centre.
+  const x = W / 2 - (tw / 2) * Math.cos(a) + (th / 2) * Math.sin(a);
+  const y = H / 2 - (tw / 2) * Math.sin(a) - (th / 2) * Math.cos(a);
+  page.drawText(text, { x, y, size, font, rotate: degrees(45), color: rgb(0, 0, 0), opacity: wm.opacity, blendMode: BlendMode.Multiply });
+}
 
 /** Standard PDF fonts only cover Latin-1; replace anything else so export never fails. */
 function safe(text: string, font: PDFFont) {
@@ -76,7 +119,12 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
       )
     : [];
   const allHeader = [...headerLines, ...instructions];
-  const headerHeight = allHeader.reduce((h, l) => h + l.size + l.gapAfter, 0) + 16;
+
+  // School logo above the title.
+  const logo = input.branding?.logo ? await embedLogo(out, input.branding.logo) : null;
+  const logoSize = logo ? logo.scaleToFit(contentW * 0.4, LOGO_MAX_H) : null;
+  const logoBlock = logoSize ? logoSize.height + LOGO_GAP : 0;
+  const headerHeight = logoBlock + allHeader.reduce((h, l) => h + l.size + l.gapAfter, 0) + 16;
 
   // ---- Layout ------------------------------------------------------------------------------
   const regionsPerItem = items.map((it) => itemRegions(it, bank));
@@ -89,6 +137,15 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
 
   // Header
   let y = L.margin;
+  if (logo && logoSize) {
+    pages[0].drawImage(logo, {
+      x: (A4.w - logoSize.width) / 2,
+      y: topDownToPdfLibY(y, logoSize.height, H),
+      width: logoSize.width,
+      height: logoSize.height,
+    });
+    y += logoBlock;
+  }
   for (const l of allHeader) {
     const w = l.font.widthOfTextAtSize(l.text, l.size);
     const x = l.align === "center" ? (A4.w - w) / 2 : L.margin;
@@ -146,6 +203,24 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
       size: 12,
       font: timesBold,
     });
+  }
+
+  // ---- Watermark (last, on top) ------------------------------------------------------------
+  const wm = input.branding?.watermark;
+  if (wm) {
+    let wmLogo: PDFImage | null = null;
+    if (wm.logo?.type === "image/png") {
+      wmLogo = await (async () => {
+        try {
+          return await out.embedPng(fadePngToWhite(wm.logo!.bytes, wm.opacity));
+        } catch {
+          return null;
+        }
+      })();
+    } else if (wm.logo) {
+      wmLogo = await embedLogo(out, wm.logo);
+    }
+    for (const p of pages) drawWatermark(p, wm, sansBold, wmLogo);
   }
 
   // ---- Footer: page numbers ---------------------------------------------------------------

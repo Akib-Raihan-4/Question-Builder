@@ -6,6 +6,7 @@ import { getBuiltPaper } from "@/lib/builder/server";
 import { buildPaperPdf } from "@/lib/export/build-pdf";
 import { buildPaperDocx } from "@/lib/export/build-docx";
 import { getObjectBytes, putFile, signedDownloadUrl } from "@/lib/storage";
+import { brandingForExport } from "@/lib/branding";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -34,6 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const url = new URL(req.url);
   const format = url.searchParams.get("format") === "docx" ? "docx" : "pdf";
   const loadSource = (paperId: string) => getObjectBytes(keyOf.get(paperId)!);
+  const branding = await brandingForExport(u.userId, bp.header);
   const filename = (bp.header.title || bp.title).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "paper";
 
   // The file is saved privately in storage and downloaded through a link that expires in a few
@@ -48,7 +50,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (format === "docx") {
     const mode = url.searchParams.get("mode") === "editable" ? "editable" : "pictures";
     try {
-      const docx = await buildPaperDocx({ title: bp.title, header: bp.header, items, bank, mode, loadSource });
+      const docx = await buildPaperDocx({ title: bp.title, header: bp.header, items, bank, mode, loadSource, branding });
       return deliver(
         docx,
         `${filename}${mode === "editable" ? "_editable" : ""}.docx`,
@@ -60,6 +62,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
   }
 
-  const pdf = await buildPaperPdf({ title: bp.title, header: bp.header, items, bank, loadSource });
+  const pdf = await buildPaperPdf({ title: bp.title, header: bp.header, items, bank, loadSource, branding });
   return deliver(pdf, `${filename}.pdf`, "application/pdf", "paper.pdf");
 }
