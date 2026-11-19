@@ -21,6 +21,7 @@ MONTH_TO_SERIES = {
 def read_cover(pdf_bytes: bytes) -> dict:
     doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
     text = " ".join(" ".join(doc[i].get_text().split()) for i in range(min(2, doc.page_count)))
+    cover = " ".join(doc[0].get_text().split()) if doc.page_count else ""
     out: dict = {"paper_code": None, "series": None, "year": None, "qualification": None, "tier": None, "title": None}
 
     # Paper reference: 4MB1/01, 4MA1/1H, 4PH1/2PR, WPH13/01, 9MA0/01 ...
@@ -28,7 +29,16 @@ def read_cover(pdf_bytes: bytes) -> dict:
     if m:
         out["paper_code"] = f"{m.group(1)}/{m.group(2)}"
     m = re.search(r"\b(January|February|March|May|June|October|November)\s+(20\d{2})\b", text)
-    if m:
+    # Only the cover itself: "a specimen of wire" in a question on page 2 is not a specimen paper.
+    if re.search(r"\bSpecimen (?:Paper|Papers|Material)|\bSpecimen\b(?=.{0,80}Paper Reference)|Sample Assessment", cover, re.I):
+        # Specimen / sample assessment papers: dated by "Specimen 2017", "first teaching
+        # September 2016" or, failing that, the copyright year.
+        out["series"] = "Specimen"
+        y = (re.search(r"Specimen(?:\s+Papers?)?\s+(20\d{2})", cover, re.I)
+             or re.search(r"first teaching[^0-9]{0,40}(20\d{2})", cover, re.I)
+             or re.search(r"©\s*(20\d{2})", cover))
+        out["year"] = int(y.group(1)) if y else (int(m.group(2)) if m else None)
+    elif m:
         out["series"] = MONTH_TO_SERIES[m.group(1).lower()]
         out["year"] = int(m.group(2))
     if re.search(r"International Advanced (Level|Subsidiary)", text):

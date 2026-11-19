@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizePaper, parsePaperFilename } from "./paper-filename";
+import { normalizePaper, parsePaperFilename, isRegional, withRegional } from "./paper-filename";
 
 describe("parsePaperFilename", () => {
   it("parses the canonical Edexcel form", () => {
@@ -52,5 +52,31 @@ describe("normalizePaper", () => {
     expect(normalizePaper("1R")).toEqual({ paper: "01R", tier: null });
     expect(normalizePaper("1H")).toEqual({ paper: "1H", tier: "H" });
     expect(normalizePaper("2FR")).toEqual({ paper: "2FR", tier: "F" });
+  });
+});
+
+describe("Paper 2, regional and specimen papers", () => {
+  it("reads Paper 2 and 2R download names", () => {
+    expect(parsePaperFilename("IGCSE_MATHEMATICS_B_2020_Jan_P2R_QP.pdf")).toMatchObject({ paperCode: "4MB1/02R", series: "January", year: 2020, tier: null });
+    expect(parsePaperFilename("IGCSE_MATHEMATICS_B_2019_Jan_P2_QP_1777808600507.pdf")).toMatchObject({ paperCode: "4MB1/02", series: "January", year: 2019 });
+  });
+  it("reads specimen names when they carry a year", () => {
+    expect(parsePaperFilename("IGCSE_MATHEMATICS_B_2016_Specimen_P1_QP.pdf")).toMatchObject({ paperCode: "4MB1/01", series: "Specimen", year: 2016 });
+    expect(parsePaperFilename("4MB1_02_2016_SAMS_qp.pdf")).toMatchObject({ paperCode: "4MB1/02", series: "Specimen", year: 2016 });
+  });
+});
+
+describe("isRegional / withRegional", () => {
+  it("knows regional codes", () => {
+    expect(isRegional("4MB1/02R")).toBe(true);
+    expect(isRegional("4MA1/1HR")).toBe(true);
+    expect(isRegional("4MB1/02")).toBe(false);
+    expect(isRegional("WPH13/01")).toBe(false);
+  });
+  it("adds and removes the R", () => {
+    expect(withRegional("4mb1/02", true)).toBe("4MB1/02R");
+    expect(withRegional("4MB1/02R", true)).toBe("4MB1/02R");
+    expect(withRegional("4MA1/1HR", false)).toBe("4MA1/1H");
+    expect(withRegional("WEIRD CODE", true)).toBe("WEIRD CODE");
   });
 });

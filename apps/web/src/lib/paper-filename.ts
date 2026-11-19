@@ -16,7 +16,8 @@ export type ParsedPaperName = {
   tier: "F" | "H" | null;
 };
 
-export const SERIES = ["January", "June", "October", "November"] as const;
+/** "Specimen" = specimen / sample assessment papers (the year is the one they're dated). */
+export const SERIES = ["January", "June", "October", "November", "Specimen"] as const;
 export type Series = (typeof SERIES)[number];
 
 const SUBJECT_WORDS: Record<string, string> = {
@@ -35,7 +36,19 @@ const MONTH_TO_SERIES: Record<string, Series> = {
   MAYJUNE: "June", MJ: "June", SUMMER: "June",
   "11": "November", NOV: "November", NOVEMBER: "November", OCTNOV: "November", ON: "November",
   "10": "October", OCT: "October", OCTOBER: "October",
+  SPECIMEN: "Specimen", SPEC: "Specimen", SAM: "Specimen", SAMS: "Specimen",
 };
+
+/** A regional paper's code ends in R after its tier letter: 4MB1/02R, 4MA1/1HR. */
+export const isRegional = (paperCode: string) => /\/\d{1,2}[FH]?R$/i.test(paperCode.trim());
+
+/** Add or remove the regional R on a paper code ("4MB1/02" ⇄ "4MB1/02R"). */
+export function withRegional(paperCode: string, on: boolean): string {
+  const code = paperCode.trim().toUpperCase();
+  if (!/\/\d{1,2}[FH]?R?$/.test(code)) return code; // not a standard code: leave it alone
+  const base = code.replace(/R$/, "");
+  return on ? `${base}R` : base;
+}
 
 /** Paper part of a code: "1H" stays, "1" → "01", "1R" → "01R". */
 export function normalizePaper(raw: string): { paper: string; tier: "F" | "H" | null } {

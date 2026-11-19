@@ -4,12 +4,15 @@ import { db, schema } from "@/db";
 import { loadBankQuestions } from "./server";
 import type { BankQuestion } from "./model";
 import { searchWords, snippet } from "./highlight";
+import { SERIES } from "@/lib/paper-filename";
 
 /** Search filters. Topic search is postponed (no topics yet). */
 export const SearchParams = z.object({
   subjectId: z.string().uuid().optional(),
   paperId: z.string().uuid().optional(),
-  series: z.enum(["January", "June", "October", "November"]).optional(),
+  series: z.enum(SERIES).optional(),
+  /** Paper number, e.g. 2 = Paper 2 and its regional version 2R. */
+  paperNo: z.coerce.number().int().min(1).max(9).optional(),
   yearFrom: z.coerce.number().int().min(2000).max(2100).optional(),
   yearTo: z.coerce.number().int().min(2000).max(2100).optional(),
   minMarks: z.coerce.number().int().min(0).max(100).optional(),
@@ -30,6 +33,7 @@ export async function searchQuestions(p: SearchParams): Promise<{ total: number;
   if (p.subjectId) conds.push(eq(schema.papers.subjectId, p.subjectId));
   if (p.paperId) conds.push(eq(schema.papers.id, p.paperId));
   if (p.series) conds.push(eq(schema.papers.series, p.series));
+  if (p.paperNo) conds.push(sql`${schema.papers.paperCode} ~ ${`^[^/]+/0*${p.paperNo}[A-Z]*$`}`);
   if (p.yearFrom) conds.push(gte(schema.papers.year, p.yearFrom));
   if (p.yearTo) conds.push(lte(schema.papers.year, p.yearTo));
   if (p.minMarks !== undefined) conds.push(gte(schema.questions.totalMarks, p.minMarks));

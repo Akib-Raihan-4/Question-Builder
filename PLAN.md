@@ -255,5 +255,20 @@ regions on the original MS PDF, never as text or images.
    and the paper total at the end. Only the parts the teacher picked are included; questions
    without a mark scheme are listed on a note page instead of failing. DOCX (pictures mode) next.
    The builder shows a small "MS" badge on questions that have one.
-4. **Maths B mark schemes** — different table (Question | Working | Answer | Mark | Notes); a
-   second parser behind the same interface once sample mark schemes are in `/samples`.
+4. **Maths B mark schemes** — table Question | Working | (Answer) | Mark | Notes, labels written
+   "1 (a)" with the number and part as separate words, and a "Total N marks" row after each
+   question. Samples: `samples/Maths-B-MS` (Paper 1, 7 series) and `samples/Maths-B-P2`
+   (Paper 2 and 2R, 2019–2020). A second reader behind the same interface; done when all of them
+   link every row to its part. Mark schemes are matched to papers by code too, so 4MB1/02R gets
+   the 2R mark scheme, not Paper 2's.
+
+### Paper versions (done 19 Nov 2026)
+- **Paper 2 / regional (R)**: Maths B Paper 2 and 2R are read by the existing Edexcel parser
+  (5 of 6 samples: every question, 100 marks; 2019 June 2R is scanned images only — mark by hand).
+  Upload and Edit details have **Version: Standard / Regional (R)**, which adds or removes the R
+  on the code (4MB1/02 ⇄ 4MB1/02R, 4MA1/1H ⇄ 4MA1/1HR). The builder marks regional papers and
+  search has a **Paper** filter (Paper 2 includes 2R).
+- **Specimen papers**: "Specimen" is a series (with the year they're dated). Read from covers
+  ("Specimen Paper", "Sample Assessment Material", dated by "Specimen 2017", "first teaching …
+  2016" or ©) and from file names (SPECIMEN / SAM / SAMS). Needs a real specimen paper to confirm.
+- Later: scanned papers could be read with OCR (needs Tesseract on the processor).

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { unzipSync } from "fflate";
-import { parsePaperFilename, SERIES } from "@/lib/paper-filename";
+import { isRegional, parsePaperFilename, SERIES, withRegional } from "@/lib/paper-filename";
 import { matchSubject, MAX_UPLOAD_BYTES } from "@/lib/papers/match";
 import { cn } from "@/lib/utils";
 
@@ -163,6 +163,20 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
       <div className="space-y-2">
         <Label htmlFor="paperCode">Paper code</Label>
         <Input id="paperCode" name="paperCode" placeholder="e.g. 4MB1/01 or WPH13/01" value={paperCode} onChange={(e) => setPaperCode(e.target.value.toUpperCase())} required />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="version">Version</Label>
+        <select
+          id="version"
+          className={selectCls}
+          value={isRegional(paperCode) ? "R" : ""}
+          onChange={(e) => setPaperCode(withRegional(paperCode, e.target.value === "R"))}
+          disabled={!/\/\d{1,2}[FH]?R?$/.test(paperCode)}
+          title={/\/\d{1,2}[FH]?R?$/.test(paperCode) ? "Regional papers have R at the end of their code" : "Type a paper code like 4MB1/02 first"}
+        >
+          <option value="">Standard</option>
+          <option value="R">Regional (R)</option>
+        </select>
       </div>
       <div className="space-y-2">
         <Label htmlFor="tier">Tier</Label>

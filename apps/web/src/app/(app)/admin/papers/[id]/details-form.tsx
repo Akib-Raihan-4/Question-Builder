@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { SERIES } from "@/lib/paper-filename";
+import { isRegional, SERIES, withRegional } from "@/lib/paper-filename";
 import type { ReviewData } from "@/lib/review/types";
 
 const cls = "h-8 rounded-md border border-input bg-background px-2 text-base sm:text-sm pointer-coarse:h-10";
@@ -31,6 +31,17 @@ export function DetailsForm({ data, onSave, onCancel }: { data: ReviewData; onSa
       </label>
       <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">Paper code
         <input className={`${cls} w-28`} value={paperCode} onChange={(e) => setPaperCode(e.target.value.toUpperCase())} />
+      </label>
+      <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">Version
+        <select
+          className={cls}
+          value={isRegional(paperCode) ? "R" : ""}
+          onChange={(e) => setPaperCode(withRegional(paperCode, e.target.value === "R"))}
+          disabled={!/\/\d{1,2}[FH]?R?$/.test(paperCode)}
+        >
+          <option value="">Standard</option>
+          <option value="R">Regional (R)</option>
+        </select>
       </label>
       <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">Series
         <select className={cls} value={series} onChange={(e) => setSeries(e.target.value)}>

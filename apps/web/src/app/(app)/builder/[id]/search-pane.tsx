@@ -7,6 +7,7 @@ import { useBuilder } from "@/lib/builder/store";
 import { pickPart, pickQuestion, unpickPart, unpickQuestion } from "@/lib/builder/actions";
 import { cn } from "@/lib/utils";
 import { searchWords, splitMatches } from "@/lib/builder/highlight";
+import { SERIES } from "@/lib/paper-filename";
 import { Select } from "@/components/ui/select";
 import type { SourcePaper } from "./browse-pane";
 
@@ -15,6 +16,7 @@ const PAGE = 20;
 
 type Filters = {
   q: string;
+  paperNo: string;
   yearFrom: string;
   yearTo: string;
   series: string;
@@ -22,7 +24,7 @@ type Filters = {
   maxMarks: string;
   sort: "paper" | "marks" | "popular";
 };
-const EMPTY: Filters = { q: "", yearFrom: "", yearTo: "", series: "", minMarks: "", maxMarks: "", sort: "paper" };
+const EMPTY: Filters = { q: "", paperNo: "", yearFrom: "", yearTo: "", series: "", minMarks: "", maxMarks: "", sort: "paper" };
 
 /** Find questions across all published papers of a subject (topics are postponed). */
 export function SearchPane({ subjectId, sources }: { subjectId: string; sources: SourcePaper[] }) {
@@ -33,6 +35,14 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [width, setWidth] = useState(480);
+  // Paper numbers in this subject (Paper 1, Paper 2 …); each includes its regional R version.
+  const paperNos = useMemo(
+    () =>
+      [...new Set(sources.filter((s) => s.subjectId === subjectId).map((s) => Number(s.paperCode.match(/\/0*(\d+)/)?.[1])).filter((n) => n > 0))].sort(
+        (a, b) => a - b,
+      ),
+    [sources, subjectId],
+  );
   const years = useMemo(
     () => [...new Set(sources.filter((s) => s.subjectId === subjectId).map((s) => s.year))].sort(),
     [sources, subjectId],
@@ -45,7 +55,7 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
 
   const query = useMemo(() => {
     const p = new URLSearchParams({ subjectId, sort: debounced.sort, limit: String(PAGE) });
-    for (const k of ["q", "yearFrom", "yearTo", "series", "minMarks", "maxMarks"] as const) if (debounced[k]) p.set(k, debounced[k]);
+    for (const k of ["q", "paperNo", "yearFrom", "yearTo", "series", "minMarks", "maxMarks"] as const) if (debounced[k]) p.set(k, debounced[k]);
     return p;
   }, [debounced, subjectId]);
 
@@ -100,8 +110,19 @@ export function SearchPane({ subjectId, sources }: { subjectId: string; sources:
             aria-label="Series"
             value={filters.series || "any"}
             onValueChange={pick("series")}
-            options={[{ value: "any", label: "Any series" }, ...["January", "June", "October", "November"].map((s) => ({ value: s, label: s }))]}
+            options={[{ value: "any", label: "Any series" }, ...SERIES.map((s) => ({ value: s, label: s }))]}
           />
+          {paperNos.length > 1 && (
+            <Select
+              aria-label="Paper"
+              value={filters.paperNo || "any"}
+              onValueChange={pick("paperNo")}
+              options={[
+                { value: "any", label: "All papers" },
+                ...paperNos.map((n) => ({ value: String(n), label: `Paper ${n}`, hint: `incl. ${n}R` })),
+              ]}
+            />
+          )}
           <span className="flex items-center gap-1 text-muted-foreground">
             Marks
             <input className={cn(field, "w-12")} placeholder="min" value={filters.minMarks} onChange={set("minMarks")} aria-label="Minimum marks" />–

@@ -7,6 +7,7 @@ import { getPdfDoc, onPdfProgress } from "@/components/pdf/pdf-cache";
 import { cn } from "@/lib/utils";
 import { Select } from "@/components/ui/select";
 import { HScroll } from "@/components/h-scroll";
+import { isRegional } from "@/lib/paper-filename";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
@@ -153,7 +154,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
             options={papers.map((p) => ({
               value: p.id,
               label: `${p.series} ${p.year} · ${p.paperCode}`,
-              hint: p.tier ? (p.tier === "H" ? "Higher" : "Foundation") : undefined,
+              hint: [p.tier && (p.tier === "H" ? "Higher" : "Foundation"), isRegional(p.paperCode) && "Regional"].filter(Boolean).join(", ") || undefined,
               group: String(p.year),
             }))}
           />
