@@ -14,6 +14,7 @@ describe("linkRows", () => {
       [
         { label: "1(a)(i)", question: 1, part: "a(i)", regions: reg },
         { label: "1(a)(ii)", question: 1, part: "a(ii)", regions: reg },
+        { label: "1(a)", question: 1, part: "a", regions: reg }, // a letter row → its first sub-part
         { label: "2(a)(i)", question: 2, part: "a(i)", regions: reg }, // paper only has 2(a)
         { label: "2(c)", question: 2, part: "c", regions: reg }, // no such part
         { label: "3(a)", question: 3, part: "a", regions: reg }, // paper didn't split Q3
@@ -24,6 +25,7 @@ describe("linkRows", () => {
     expect(rows.map((r) => [r.label, r.questionId, r.partId])).toEqual([
       ["1(a)(i)", "q1", "p1a"],
       ["1(a)(ii)", "q1", "p1b"],
+      ["1(a)", "q1", "p1a"],
       ["2(a)(i)", "q2", "p2a"],
       ["2(c)", null, null],
       ["3(a)", "q3", null],

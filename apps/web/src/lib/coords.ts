@@ -86,3 +86,38 @@ export function rectSize(r: PdfRect): { width: number; height: number } {
   const n = normalizeRect(r);
   return { width: n.x1 - n.x0, height: n.y1 - n.y0 };
 }
+
+/**
+ * Stored boxes are in the page AS DISPLAYED (that's how the app renders them). Some mark schemes
+ * keep landscape pages rotated (/Rotate 90), so for those the box is turned back into the page's
+ * own (unrotated) space for embedding, and the embedded piece is drawn turned the same way.
+ * Returns the embed box (pdf-lib, bottom-left origin) and how to draw it into a target rectangle.
+ */
+export function rotatedPlacement(
+  g: { x0: number; y0: number; x1: number; y1: number },
+  angle: number,
+  page: { x: number; y: number; width: number; height: number },
+) {
+  const a = ((angle % 360) + 360) % 360;
+  const { x: ox, y: oy, width: w0, height: h0 } = page;
+  // Unrotated top-left box, then pdf-lib's bottom-left box.
+  const tl =
+    a === 90
+      ? { x0: g.y0, x1: g.y1, y0: h0 - g.x1, y1: h0 - g.x0 }
+      : a === 180
+        ? { x0: w0 - g.x1, x1: w0 - g.x0, y0: h0 - g.y1, y1: h0 - g.y0 }
+        : a === 270
+          ? { x0: w0 - g.y1, x1: w0 - g.y0, y0: g.x0, y1: g.x1 }
+          : { x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 };
+  const box = { left: ox + tl.x0, right: ox + tl.x1, bottom: oy + h0 - tl.y1, top: oy + h0 - tl.y0 };
+  /** Draw params for a target rectangle (pdf-lib coords: left, bottom, width, height) in display orientation; rotate in degrees. */
+  const draw = (L: number, B: number, DW: number, DH: number) =>
+    a === 90
+      ? { x: L, y: B + DH, width: DH, height: DW, rotate: -90 }
+      : a === 180
+        ? { x: L + DW, y: B + DH, width: DW, height: DH, rotate: 180 }
+        : a === 270
+          ? { x: L + DW, y: B, width: DH, height: DW, rotate: 90 }
+          : { x: L, y: B, width: DW, height: DH, rotate: 0 };
+  return { box, draw };
+}

@@ -1,6 +1,6 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { PaperHeader } from "@/db/schema";
-import { pdfToPdfLib, topDownToPdfLibY } from "@/lib/coords";
+import { rotatedPlacement, topDownToPdfLibY } from "@/lib/coords";
 import { itemMarks, totalMarks, type Bank, type Item } from "@/lib/builder/model";
 import { A4 } from "./layout";
 
@@ -129,13 +129,15 @@ export async function buildMarkSchemePdf(input: MsExportInput): Promise<{ pdf: U
       for (const [ri, g] of row.regions.entries()) {
         const srcPage = src.getPage(g.page);
         const crop = srcPage.getCropBox();
+        const place = rotatedPlacement(g, srcPage.getRotation().angle, crop);
         const w = g.x1 - g.x0;
         const h = g.y1 - g.y0;
         const scale = Math.min(1, cropW / w, (bottom - MARGIN - HEAD_H - TOTAL_H) / h);
         const dh = h * scale;
         if (y + dh > bottom) newPage();
-        const embedded = await out.embedPage(srcPage, pdfToPdfLib(g, crop.height, { x: crop.x, y: crop.y }));
-        page.drawPage(embedded, { x: cropLeft, y: topDownToPdfLibY(y, dh, H), width: w * scale, height: dh });
+        const embedded = await out.embedPage(srcPage, place.box);
+        const at = place.draw(cropLeft, topDownToPdfLibY(y, dh, H), w * scale, dh);
+        page.drawPage(embedded, { ...at, rotate: degrees(at.rotate) });
         box(page, left, y, LABEL_W, dh);
         box(page, cropLeft, y, cropW, dh);
         if (ri === 0) text(page, renumber(row.label, serial), left + 6, y + 6, 10, bold);

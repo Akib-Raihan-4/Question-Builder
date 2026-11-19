@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flipY, normalizeRect, pdfLibToPdf, pdfToPdfLib, pdfToScreen, rectSize, screenToPdf, topDownToPdfLibY } from "./coords";
+import { flipY, normalizeRect, pdfLibToPdf, pdfToPdfLib, pdfToScreen, rectSize, screenToPdf, topDownToPdfLibY, rotatedPlacement } from "./coords";
 
 const A4_H = 841.89;
 const rect = { x0: 60, y0: 100, x1: 540, y1: 300 };
@@ -70,5 +70,22 @@ describe("top-down layout → pdf-lib", () => {
 describe("normalizeRect", () => {
   it("orders inverted corners (e.g. a box dragged up-left)", () => {
     expect(normalizeRect({ x0: 540, y0: 300, x1: 60, y1: 100 })).toEqual(rect);
+  });
+});
+
+describe("rotatedPlacement (pages stored rotated, boxes as displayed)", () => {
+  const portrait = { x: 0, y: 0, width: 595, height: 842 }; // unrotated page; shown landscape when /Rotate 90
+  it("leaves unrotated pages alone", () => {
+    const p = rotatedPlacement({ x0: 10, y0: 20, x1: 110, y1: 70 }, 0, portrait);
+    expect(p.box).toEqual({ left: 10, right: 110, bottom: 772, top: 822 });
+    expect(p.draw(5, 6, 100, 50)).toEqual({ x: 5, y: 6, width: 100, height: 50, rotate: 0 });
+  });
+  it("maps a displayed box on a 90° page back to the page's own space and draws it turned", () => {
+    // Displayed (842 wide): x 78–124, y 102–116 is unrotated x 102–116, y 718–764 (top-left).
+    const p = rotatedPlacement({ x0: 78, y0: 102, x1: 124, y1: 116 }, 90, portrait);
+    expect(p.box).toEqual({ left: 102, right: 116, bottom: 78, top: 124 });
+    const d = p.draw(0, 0, 46, 14);
+    expect([d.x, d.y, d.width, d.height]).toEqual([0, 14, 14, 46]);
+    expect(d.rotate).toBe(-90);
   });
 });

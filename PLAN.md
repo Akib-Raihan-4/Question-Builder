@@ -287,10 +287,12 @@ paper versions (regional R, Specimen, Paper 1 / Paper 2 shown separately), subje
 styled dropdowns on upload and Edit details, clear processor errors + connection check.
 
 ### Next (most useful first)
-1. **Maths B mark schemes (C4).** Tune the reader for Question | Working | Answer | Mark | Notes
-   tables ("1 (a)" labels, "Total N marks" rows, totals in the Mark column). Samples are in
-   `samples/Maths-B-MS` and `samples/Maths-B-P2`. Done when every sample links every part and the
-   marks check passes.
+1. ~~**Maths B mark schemes (C4).**~~ Done 19 Nov 2026: 11 of the 12 samples with a readable
+   question paper link every part (2020 Jan 2R's Q10 is split wrongly by the question finder, so
+   three rows stay unmatched until it's fixed in Review). Marks check: 1 passes outright, the rest
+   flag a few parts whose printed marks differ or are missing, for a quick look. Handles rotated
+   landscape pages, centred headings, split Question columns, unruled and continuation tables,
+   method boxes, parts numbered only (i), (ii).
 2. **Bulk mark scheme upload.** Drop many mark scheme PDFs at once; each is matched to its paper
    from the cover ("Mark Scheme (Results) January 2024 … (WPH13) Paper 01", or the publications code
    "WPH13_01_2401_MS") and the file name; unmatched ones are listed to pick by hand.

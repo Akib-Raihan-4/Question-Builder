@@ -21,7 +21,7 @@ import re
 import pymupdf
 from pydantic import BaseModel, Field
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 LABEL = re.compile(r"^(\d{1,2})?((?:\([a-z]{1,2}\))*)((?:\([ivx]+\))*)\*?$")
 
 
@@ -80,6 +80,10 @@ def normalize_label(text: str, current: tuple[int, str | None] | None) -> tuple[
         num, prev_letter = current
     else:
         return None
+    # A lone Roman numeral first ("4 (i)", or "(ii)" after "4 (i)") is a part on its own when the
+    # question has no letters (Maths B: parts (i), (ii)); under a letter it nests: 2(a)(ii).
+    if groups and ROMAN.match(groups[0]) and (len(groups[0]) > 1 or groups[0] == "i") and not (prev_letter and not ROMAN.match(prev_letter)):
+        return num, None, groups[0]
     letter = roman = None
     for g in groups:
         if letter is None and roman is None and not (ROMAN.match(g) and g != "i" and prev_letter) and len(g) <= 2 and not (ROMAN.match(g) and len(g) > 1):
@@ -98,30 +102,57 @@ def label_text(q: int, letter: str | None, roman: str | None) -> str:
 
 
 def part_label(letter: str | None, roman: str | None) -> str | None:
-    """Our part label format: 'a', 'b(i)'; None = the whole question."""
+    """Our part label format: 'a', 'b(i)', or 'ii' for a part numbered only in Roman; None = the whole question."""
     if not letter and not roman:
         return None
-    return (letter or "") + (f"({roman})" if roman else "")
+    if not letter:
+        return roman
+    return letter + (f"({roman})" if roman else "")
 
 
-def _rules(page: pymupdf.Page):
-    """Horizontal and vertical rules (lines or thin rectangles)."""
+def _rules(page: pymupdf.Page, m: pymupdf.Matrix | None = None):
+    """Horizontal and vertical rules (lines or thin rectangles), in display space (see `m`)."""
+    m = m or pymupdf.Identity
     hs, vs = [], []
     for d in page.get_drawings():
         for it in d["items"]:
             if it[0] == "l":
-                a, b = it[1], it[2]
+                a, b = it[1] * m, it[2] * m
                 if abs(a.y - b.y) < 0.8 and abs(a.x - b.x) > 20:
                     hs.append((a.y, min(a.x, b.x), max(a.x, b.x)))
                 elif abs(a.x - b.x) < 0.8 and abs(a.y - b.y) > 8:
                     vs.append((a.x, min(a.y, b.y), max(a.y, b.y)))
             elif it[0] == "re":
-                r = it[1]
+                r = pymupdf.Rect(it[1]) * m
                 if r.height < 2.5 and r.width > 20:
                     hs.append(((r.y0 + r.y1) / 2, r.x0, r.x1))
                 elif r.width < 2.5 and r.height > 8:
                     vs.append(((r.x0 + r.x1) / 2, r.y0, r.y1))
     return hs, vs
+
+
+def line_text(ws: list) -> str:
+    """Words read line by line, left to right (words on one line can differ by a point or two in y)."""
+    lines: list[list] = []
+    for w in sorted(ws, key=lambda w: w[1]):
+        if lines and abs(w[1] - lines[-1][0][1]) < 4:
+            lines[-1].append(w)
+        else:
+            lines.append([w])
+    return " ".join(" ".join(x[4] for x in sorted(ln, key=lambda x: x[0])) for ln in lines)
+
+
+def _join_horizontal(hs: list[tuple]) -> list[tuple]:
+    """Rules drawn as one short piece per column, at the same height and touching end to end,
+    become one rule (so a rule split at the column lines still crosses the Question column)."""
+    out: list[list[float]] = []
+    for y, x0, x1 in sorted(hs, key=lambda h: (round(h[0]), h[1])):
+        last = out[-1] if out else None
+        if last and abs(last[0] - y) < 1.0 and x0 <= last[2] + 3:
+            last[2] = max(last[2], x1)
+        else:
+            out.append([y, x0, x1])
+    return [tuple(h) for h in out]
 
 
 def _merge(ys: list[float], tol: float = 1.5) -> list[float]:
@@ -159,22 +190,35 @@ def read_mark_scheme(data: bytes) -> MsResult:
     rows: list[MsRow] = []
     state = {"current": None, "context": None}  # row being filled; (question, letter) of the row above
     label_x: tuple[float, float] | None = None  # label column, carried to pages without a header
+    mark_col: tuple[float, float] | None = None  # Mark column, carried the same way
 
-    def segment(pi, page, words, hs, vs, y_lo, y_hi, header_bottom, lx0, lx1, has_header, ink=()) -> bool:
+    def segment(pi, page, words, hs, vs, y_lo, y_hi, header_bottom, lx0, lx1, has_header, ink=(), mark_col=None) -> bool:
+        # On a page without its own header, read marks only where the Mark column's rules are
+        # exactly where they were on the header page.
+        page_vs = {round(v[0]) for v in vs if v[2] > y_lo and v[1] < y_hi}
+        mark_trusted = bool(mark_col) and all(any(abs(x - m) <= 3 for x in page_vs) for m in (mark_col or ()))
         """Rows of one table (or the continuation of one) between y_lo and y_hi. False = no table here."""
         in_band = lambda y: y_lo - 1 <= y <= y_hi + 1  # noqa: E731
         seg_vs = [v for v in vs if v[2] > y_lo and v[1] < y_hi]
         table_right = max([v[0] for v in seg_vs if v[0] > lx1] or [page.rect.width - 40])
-        # The Mark column: between the last two vertical rules (or the table's last ~45 pt).
+        # The Mark column: found from its heading ("Mark"), else the last two vertical rules (or the
+        # table's last ~45 pt). Maths B tables have a Notes column after it.
         cols = sorted({round(v[0]) for v in seg_vs if v[0] > lx1 + 20})
-        mark_left = cols[-2] if len(cols) >= 2 and table_right - cols[-2] < 90 else table_right - 45
-        bounds = _merge([y for (y, x0, x1) in hs if x0 <= lx0 + 6 and x1 >= lx1 - 6 and in_band(y)])
+        if mark_col:
+            mark_left, mark_right = mark_col
+        else:
+            mark_left = cols[-2] if len(cols) >= 2 and table_right - cols[-2] < 90 else table_right - 45
+            mark_right = table_right + 5
+        bounds = _merge([y for (y, x0, x1) in hs if x0 <= lx0 + 6 and x1 >= min(lx1 - 6, lx0 + 25) and in_band(y)])
         below = [y for y in bounds if y > header_bottom - 3]  # the rule under the header row starts the first row
         label_words = [w for w in words if w[0] >= lx0 - 1 and w[2] <= lx1 + 2 and header_bottom < (w[1] + w[3]) / 2 < y_hi]
-        if not has_header and len(below) < 2:
-            return False
-        if len(below) < 2:
-            # No ruled rows: start a row at each label line.
+        col_lines = all(any(abs(x - c) <= 3 for x in page_vs) for c in (lx0, lx1))
+        if not has_header and len(below) < 2 and not (col_lines and label_words):
+            return False  # no table here (unless its column lines carry on, with labels in them)
+        first_label = min((w[1] for w in label_words), default=None)
+        unruled = len(below) < 2 or (first_label is not None and not any(b > first_label + 2 for b in below))
+        if unruled:
+            # No ruled rows (or rules only around the header): start a row at each label line.
             lines: dict[int, list] = {}
             for w in label_words:
                 lines.setdefault(round(w[1] / 3), []).append(w)
@@ -182,10 +226,27 @@ def read_mark_scheme(data: bytes) -> MsResult:
             content_bottom = max([w[3] for w in words if w[0] > lx1 and w[3] < y_hi] or [y_hi - 3]) + 3
             below = _merge([header_bottom + 2, *tops, content_bottom], tol=4)
         mid = lambda w: (w[1] + w[3]) / 2  # noqa: E731 — text boxes poke a little above their row's rule
-        for top, bottom in zip(below, below[1:]):
+
+        # Some tables rule only around a whole question, with its parts (a), (b) … stacked in one
+        # box: split such a box at every further label line.
+        def split_at_labels(top: float, bottom: float) -> list[tuple[float, float]]:
+            ws = sorted((w for w in label_words if top < mid(w) < bottom), key=lambda w: w[1])
+            lines: list[list] = []
+            for w in ws:
+                if lines and abs(w[1] - lines[-1][0][1]) < 4:
+                    lines[-1].append(w)
+                else:
+                    lines.append([w])
+            starts = [min(x[1] for x in ln) - 3 for ln in lines[1:]
+                      if normalize_label(" ".join(x[4] for x in sorted(ln, key=lambda x: x[0])), (1, "a")) is not None]
+            cuts = [top, *[y for y in starts if top + 6 < y < bottom - 6], bottom]
+            return list(zip(cuts, cuts[1:]))
+
+        intervals = [iv for top, bottom in zip(below, below[1:]) for iv in split_at_labels(top, bottom)]
+        for top, bottom in intervals:
             if bottom - top < 4:
                 continue
-            text = " ".join(w[4] for w in sorted((w for w in label_words if top < mid(w) < bottom), key=lambda w: (round(w[1]), w[0])))
+            text = line_text([w for w in label_words if top < mid(w) < bottom])
             body = " ".join(w[4] for w in sorted((w for w in words if top < mid(w) < bottom), key=lambda w: (round(w[1]), w[0])))
             inside = [w for w in words if top < mid(w) < bottom and w[0] > lx1]
             # Trim a tall row's empty bottom (keep a little room under the last thing in it).
@@ -195,14 +256,22 @@ def read_mark_scheme(data: bytes) -> MsResult:
             y1 = min(bottom - 0.5, last + 8) if bottom - last > 30 else bottom - 0.5
             region = MsRegion(page=pi, x0=round(lx1 + 1, 1), y0=round(top + 0.5, 1), x1=round(table_right - 0.5, 1), y1=round(y1, 1))
             # The row's total in the Mark column: "2", or "(2)" on some papers.
-            totals = [w for w in inside if w[0] >= mark_left - 2 and re.fullmatch(r"\(?\d{1,2}\)?", w[4])]
+            totals = [w for w in inside if mark_left - 2 <= w[0] and w[2] <= mark_right + 2 and re.fullmatch(r"\(?\d{1,2}\)?", w[4])]
             row_marks = int(sorted(totals, key=lambda w: w[1])[-1][4].strip("()")) if totals else None
+            if not has_header and mark_col and not mark_trusted:
+                row_marks = None  # this page's table has other columns (e.g. an alternative-methods box)
             if re.match(r"^\s*total\b", text, re.I) or re.match(r"^\s*total for question", body, re.I):
                 state["current"] = None  # question total row: ends the question, not cropped
                 continue
             if re.fullmatch(r"\s*question\s*(number|no\.?)?\s*", text, re.I):
                 continue  # a repeated header row
             parsed = normalize_label(text, state["context"]) if text.strip() else None
+            # Question numbers only go up, a little at a time (axis numbers on a graph, "30 25 20",
+            # aren't questions). The first one is 1–3.
+            if parsed:
+                cq = state["context"][0] if state["context"] else None
+                if (cq is None and parsed[0] > 3) or (cq is not None and not (cq <= parsed[0] <= cq + 3)):
+                    parsed = None
             if parsed:
                 q, letter, roman = parsed
                 state["context"] = (q, letter)
@@ -211,24 +280,49 @@ def read_mark_scheme(data: bytes) -> MsResult:
             elif not text.strip() and state["current"] is not None:
                 if inside:  # the row continues (usually onto a new page); empty strips are skipped
                     state["current"].regions.append(region)
-                    if row_marks is not None:
+                    if row_marks is not None and state["current"].marks is None:
                         state["current"].marks = row_marks
+            elif text.strip() and state["current"] is not None and inside:
+                # Not a label (e.g. a "Method 1 / Method 2" box running across the table): it
+                # belongs to the row above.
+                state["current"].regions.append(region)
+                if row_marks is not None and state["current"].marks is None:
+                    state["current"].marks = row_marks
             elif text.strip() and rows:  # before the first real label: guidance pages, not rows
                 res.warnings.append(f"Page {pi + 1}: couldn't read the label {text!r}")
         return True
 
     for pi, page in enumerate(doc):
-        words = page.get_text("words")
-        hs, vs = _rules(page)
+        # Some mark schemes store landscape pages rotated: work in the page as displayed (that's
+        # also how the app renders crops), so rotated pages read like any other.
+        m = page.rotation_matrix if page.rotation else pymupdf.Identity
+        words = [(*tuple(pymupdf.Rect(w[:4]) * m), *w[4:]) for w in page.get_text("words")] if page.rotation else page.get_text("words")
+        hs, vs = _rules(page, m)
         # Drawn things that aren't table rules (diagrams, graphs) and images.
-        ink = [d["rect"] for d in page.get_drawings() if not (d["rect"].height < 2.5 or d["rect"].width < 2.5)]
-        ink += [pymupdf.Rect(i["bbox"]) for i in page.get_image_info()]
+        ink = [pymupdf.Rect(d["rect"]) * m for d in page.get_drawings()]
+        ink = [r for r in ink if not (r.height < 2.5 or r.width < 2.5)]
+        ink += [pymupdf.Rect(i["bbox"]) * m for i in page.get_image_info()]
         headers = _headers(words)
         H = page.rect.height
         # The part above the first header continues the previous page's table.
         first_top = headers[0][0][1] - 4 if headers else H
         if label_x is not None and first_top > 20:
-            if not segment(pi, page, words, hs, vs, 0, first_top, 0.0, *label_x, has_header=False, ink=ink) and not headers:
+            # The table carries on from the last page; its columns may be drawn a little differently
+            # here (narrower Question column), so measure them from this page's rules if possible.
+            top_vs = sorted({round(v[0], 1) for v in vs if v[1] < first_top})
+
+            def nearest(x: float, within: float) -> float | None:
+                best = min(top_vs, key=lambda v: abs(v - x), default=None)
+                return best if best is not None and abs(best - x) < within else None
+
+            lft = nearest(label_x[0], 15)
+            if lft is not None:
+                right_side = [v for v in top_vs if v > lft + 15]
+                rgt = min(right_side, key=lambda v: abs(v - label_x[1]), default=None)
+                if rgt is not None and abs(rgt - label_x[1]) < 40:
+                    label_x = (lft, rgt)
+
+            if not segment(pi, page, words, hs, vs, 0, first_top, 0.0, *label_x, has_header=False, ink=ink, mark_col=mark_col) and not headers:
                 label_x, state["current"] = None, None  # no header and no table rules: the table has ended
         elif label_x is None and not headers:
             continue  # before the table starts (cover, guidance pages)
@@ -238,10 +332,19 @@ def read_mark_scheme(data: bytes) -> MsResult:
             band_vs = [v for v in vs if v[2] > y_lo and v[1] < y_hi]
             right_of = [v[0] for v in band_vs if hw[2] - 2 < v[0] < hw[2] + 80]
             nxt = sorted(w[0] for w in words if abs(w[1] - hw[1]) < 8 and w[0] > hw[2] + 5)
-            left = min([v[0] for v in band_vs if hw[0] - 30 < v[0] < hw[0] + 2] or [hw[0] - 5])
+            # The column's left rule: the nearest one left of the heading (headings may be centred).
+            left = max([v[0] for v in band_vs if hw[0] - 60 < v[0] < hw[0] + 2] or [hw[0] - 5])
             col_right = min(right_of) if right_of else (nxt[0] - 3 if nxt else hw[2] + 20)
             label_x = (left, col_right)
-            segment(pi, page, words, hs, vs, y_lo, y_hi, header_bottom, *label_x, has_header=True, ink=ink)
+            mw = next((w for w in words if w[4].lower() in ("mark", "marks") and abs(w[1] - hw[1]) < 22 and w[0] > col_right), None)
+            if mw:
+                xs = sorted({v[0] for v in band_vs})
+                lft = max([x for x in xs if x < mw[0] + 2] or [mw[0] - 20])
+                rgt = min([x for x in xs if x > mw[2] - 2] or [mw[2] + 30])
+                mark_col = (lft, rgt)
+            else:
+                mark_col = None
+            segment(pi, page, words, hs, vs, y_lo, y_hi, header_bottom, *label_x, has_header=True, ink=ink, mark_col=mark_col)
 
     if not rows:
         res.status, res.reason = "failed", "No mark scheme table found (looked for a 'Question Number' column)."

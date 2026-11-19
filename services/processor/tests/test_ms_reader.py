@@ -65,3 +65,33 @@ def test_endpoint():
     _table(doc, [("1", 40)])
     res = TestClient(app).post("/segment/ms", files={"file": ("ms.pdf", doc.tobytes(), "application/pdf")})
     assert res.status_code == 200 and res.json()["rows"][0]["label"] == "1"
+
+
+def test_maths_b_labels():
+    # Parts numbered only in Roman, and the number and part written as separate words.
+    assert normalize_label("4 (i)", None) == (4, None, "i")
+    assert normalize_label("(ii)", (4, None)) == (4, None, "ii")
+    assert normalize_label("21 (a)", None) == (21, "a", None)
+
+
+def test_line_text_reads_left_to_right():
+    from ms_reader import line_text
+    # "(a)" sits a point higher than "6": still read as "6 (a)".
+    assert line_text([(101, 107, 113, 117, "(a)"), (67, 108, 72, 118, "6")]) == "6 (a)"
+
+
+def test_parts_stacked_in_one_box_are_split():
+    doc = pymupdf.open()
+    p = doc.new_page(width=595, height=842)
+    p.insert_text((48, 74), "Question", fontsize=10)
+    p.insert_text((287, 74), "Answer", fontsize=10)
+    p.insert_text((500, 74), "Mark", fontsize=10)
+    for y in (60, 90, 400):
+        p.draw_line((42, y), (552, y))
+    for x in (42, 95, 486, 552):
+        p.draw_line((x, 60), (x, 400))
+    for i, lab in enumerate(["1 (a)", "(b)", "(c)"]):
+        p.insert_text((48, 104 + i * 90), lab, fontsize=10)
+        p.insert_text((102, 104 + i * 90), f"answer {lab}", fontsize=10)
+    r = read_mark_scheme(doc.tobytes())
+    assert [x.label for x in r.rows] == ["1(a)", "1(b)", "1(c)"]

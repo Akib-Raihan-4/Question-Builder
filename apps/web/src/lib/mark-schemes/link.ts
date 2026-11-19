@@ -35,6 +35,10 @@ export function linkRows(rows: ReaderRow[], questions: QuestionRef[]): LinkedRow
     const exact = q.parts.find((p) => p.label === row.part);
     const parent = exact ?? q.parts.find((p) => row.part!.startsWith(`${p.label}(`));
     if (parent) return { ...row, questionId: q.id, partId: parent.id };
+    // A row for a letter whose paper parts are its sub-parts ("4(a)" when the paper has 4(a)(i),
+    // 4(a)(ii)): the letter's opening goes with its first sub-part.
+    const firstChild = q.parts.find((p) => p.label.startsWith(`${row.part}(`));
+    if (firstChild) return { ...row, questionId: q.id, partId: firstChild.id };
     if (!q.parts.length) return { ...row, questionId: q.id, partId: null }; // paper didn't split this question
     return { ...row, questionId: null, partId: null };
   });
