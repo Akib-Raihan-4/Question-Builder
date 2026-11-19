@@ -1,7 +1,8 @@
-import { BlendMode, PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import { BlendMode, LineCapStyle, PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { PaperHeader } from "@/db/schema";
 import { pdfToPdfLib, topDownToPdfLibY } from "@/lib/coords";
-import { itemMarks, itemRegions, totalMarks, type Bank, type Item } from "@/lib/builder/model";
+import { itemBlocks, itemMarks, totalMarks, type Bank, type Item } from "@/lib/builder/model";
+import { blockHeight, LINE_PITCH } from "@/lib/builder/answer-space";
 import { A4, DEFAULT_LAYOUT, layoutPaper } from "./layout";
 import type { ExportBranding, LogoImage } from "@/lib/watermark";
 import { fadePngToWhite } from "./fade-png";
@@ -127,9 +128,13 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
   const headerHeight = logoBlock + allHeader.reduce((h, l) => h + l.size + l.gapAfter, 0) + 16;
 
   // ---- Layout ------------------------------------------------------------------------------
-  const regionsPerItem = items.map((it) => itemRegions(it, bank));
+  // Each item is a list of blocks: crops of the original, then any added lines / blank space.
+  const blocksPerItem = items.map((it) => itemBlocks(it, bank));
   const layout = layoutPaper(
-    regionsPerItem.map((rs) => rs.map((r) => ({ w: r.x1 - r.x0, h: r.y1 - r.y0 }))),
+    blocksPerItem.map((bs) =>
+      // Lines and space have no width of their own (w 1 = never scaled); they span the content width.
+      bs.map((b) => (b.kind === "crop" ? { w: b.region.x1 - b.region.x0, h: b.region.y1 - b.region.y0 } : { w: 1, h: blockHeight(b) })),
+    ),
     headerHeight,
   );
   const pages = Array.from({ length: layout.pages }, () => out.addPage([A4.w, A4.h]));
@@ -174,7 +179,25 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
 
   for (const pl of layout.placements) {
     const q = bank[items[pl.item].questionId];
-    const region = regionsPerItem[pl.item][pl.region];
+    const block = blocksPerItem[pl.item][pl.region];
+    if (block.kind === "space") continue; // blank space: nothing to draw
+    if (block.kind === "lines") {
+      // Dotted answer lines across the content width, like the boards' own.
+      const unit = pl.h / blockHeight(block);
+      for (let j = 0; j < block.count; j++) {
+        const y = topDownToPdfLibY(pl.top + (6 + (j + 1) * LINE_PITCH) * unit, 0, H);
+        pages[pl.page].drawLine({
+          start: { x: pl.x, y },
+          end: { x: layout.contentRight, y },
+          thickness: 0.9,
+          dashArray: [0.01, 2.6],
+          lineCap: LineCapStyle.Round,
+          color: rgb(0.35, 0.35, 0.35),
+        });
+      }
+      continue;
+    }
+    const region = block.region;
     const src = await sourceDoc(q.paperId);
     const srcPage = src.getPage(region.page);
     const crop = srcPage.getCropBox();

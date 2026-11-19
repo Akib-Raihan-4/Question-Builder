@@ -3,8 +3,11 @@
  * The serial number shown to students is NEVER stored — it is always position + 1.
  */
 import type { PdfRect } from "@/lib/coords";
+import type { AnswerSpace } from "@/db/schema";
+import { answerSpaceBlocks, type Block, type Gap } from "./answer-space";
 
-export type Region = PdfRect & { page: number };
+/** gaps: stretches that "remove answer space" may cut out (from the paper's layout). */
+export type Region = PdfRect & { page: number; gaps?: Gap[] };
 
 export type BankPart = { id: string; label: string; marks: number; sortOrder: number; regions: Region[] };
 
@@ -19,7 +22,7 @@ export type BankQuestion = {
 };
 
 /** partIds empty = the whole question. */
-export type Item = { questionId: string; partIds: string[] };
+export type Item = { questionId: string; partIds: string[]; answerSpace?: AnswerSpace | null };
 
 export type Bank = Record<string, BankQuestion>;
 
@@ -96,6 +99,11 @@ export function move(items: Item[], from: number, to: number): Item[] {
  * The boxes to show for an item: the whole question's boxes, or — for a partial pick — the
  * question's opening text (above its first part) followed by the chosen parts' boxes.
  */
+/** What to draw for an item, top to bottom, with its answer-space setting applied. */
+export function itemBlocks(item: Item, bank: Bank): Block[] {
+  return answerSpaceBlocks(itemRegions(item, bank), item.answerSpace, (r) => r.gaps ?? []);
+}
+
 export function itemRegions(item: Item, bank: Bank): Region[] {
   const q = bank[item.questionId];
   if (!q) return [];

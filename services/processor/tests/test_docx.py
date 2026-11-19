@@ -85,3 +85,17 @@ def test_logo_and_text_watermark():
 def test_no_watermark_by_default():
     d = docx.Document(io.BytesIO(build_docx(_spec("pictures"), {"p": _paper()})))
     assert "wp:anchor" not in d.sections[0].header._element.xml
+
+
+def test_added_lines_and_space():
+    spec = DocxSpec.model_validate({
+        **_spec("pictures").model_dump(exclude={"items"}),
+        "items": [{"number": 1, "marks": 1, "paper_id": "p", "blocks": [
+            {"kind": "crop", "page": 0, "x0": 59, "y0": 80, "x1": 557.5, "y1": 200},
+            {"kind": "lines", "count": 3},
+            {"kind": "space", "h": 100},
+        ]}],
+    })
+    d = docx.Document(io.BytesIO(build_docx(spec, {"p": _paper()})))
+    xml = d.tables[0]._tbl.xml
+    assert xml.count('w:val="dotted"') == 3

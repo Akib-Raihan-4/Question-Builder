@@ -5,7 +5,9 @@ import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CropCanvas } from "@/components/pdf/crop-canvas";
-import { chosenParts, dependencyWarnings, itemMarks, itemRegions, totalMarks, type Item } from "@/lib/builder/model";
+import { chosenParts, dependencyWarnings, itemBlocks, itemMarks, itemRegions, totalMarks, type Item } from "@/lib/builder/model";
+import { LINE_PITCH, LINES_BOTTOM } from "@/lib/builder/answer-space";
+import { AnswerSpaceMenu } from "./answer-space-menu";
 import { useBuilder } from "@/lib/builder/store";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -226,7 +228,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
   const marks = itemMarks(item, bank);
   const parts = chosenParts(item, bank);
   const warnings = dependencyWarnings(item, bank);
-  const regions = itemRegions(item, bank);
+  const blocks = itemBlocks(item, bank);
   const numberColW = 36;
 
   return (
@@ -241,6 +243,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
           {q.paperLabel} · Q{q.number}
           {parts.length ? parts.map((p) => `(${p.label})`).join("") : ""}
         </span>
+        <AnswerSpaceMenu item={item} number={number} />
         <MoveControls index={index} count={count} />
         <button
           {...attributes}
@@ -267,10 +270,20 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
         <div className="shrink-0 pt-1 text-right text-[15px] font-bold" style={{ width: numberColW, paddingRight: 6 }}>
           {number}
         </div>
-        <div className="min-w-0 space-y-1">
-          {regions.map((r, i) => (
-            <CropCanvas key={i} paperId={q.paperId} page={r.page} rect={r} scale={scale} />
-          ))}
+        <div className="min-w-0 flex-1 space-y-1 pr-6">
+          {blocks.map((b, i) =>
+            b.kind === "crop" ? (
+              <CropCanvas key={i} paperId={q.paperId} page={b.region.page} rect={b.region} scale={scale} />
+            ) : b.kind === "lines" ? (
+              <div key={i} aria-label={`${b.count} answer lines`} style={{ paddingTop: 6 * scale, paddingBottom: LINES_BOTTOM * scale }}>
+                {Array.from({ length: b.count }, (_, j) => (
+                  <div key={j} className="border-b-[1.5px] border-dotted border-zinc-400" style={{ height: LINE_PITCH * scale }} />
+                ))}
+              </div>
+            ) : (
+              <div key={i} aria-label="Blank space" className="rounded-sm bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(244_244_245)_6px,rgb(244_244_245)_7px)]" style={{ height: b.h * scale }} />
+            ),
+          )}
         </div>
       </div>
       <div className="pr-6 text-right text-[13px] font-bold" style={{ fontFamily: "Times New Roman, serif" }}>

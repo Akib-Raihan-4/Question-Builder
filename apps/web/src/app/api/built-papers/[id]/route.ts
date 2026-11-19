@@ -25,7 +25,18 @@ const Body = z.object({
     showWatermark: z.boolean().optional(),
   }),
   items: z
-    .array(z.object({ questionId: z.string().uuid(), partIds: z.array(z.string().uuid()).max(50) }))
+    .array(
+      z.object({
+        questionId: z.string().uuid(),
+        partIds: z.array(z.string().uuid()).max(50),
+        answerSpace: z
+          .object({
+            remove: z.boolean().optional(),
+            add: z.object({ kind: z.enum(["lines", "space"]), amount: z.number().min(0).max(30) }).optional(),
+          })
+          .nullish(),
+      }),
+    )
     .max(200),
 });
 
@@ -66,7 +77,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (items.length) {
       await tx
         .insert(schema.builtPaperItems)
-        .values(items.map((it, position) => ({ builtPaperId: id, position, questionId: it.questionId, partIds: it.partIds })));
+        .values(
+          items.map((it, position) => ({
+            builtPaperId: id,
+            position,
+            questionId: it.questionId,
+            partIds: it.partIds,
+            answerSpace: it.answerSpace ?? null,
+          })),
+        );
     }
   });
   return NextResponse.json({ ok: true, savedAt: new Date().toISOString() });

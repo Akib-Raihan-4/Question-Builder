@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { PaperHeader } from "@/db/schema";
+import type { AnswerSpace, PaperHeader } from "@/db/schema";
 import * as m from "./model";
 
 type State = {
@@ -20,6 +20,8 @@ type State = {
   move: (from: number, to: number) => void;
   setTitle: (title: string) => void;
   setHeader: (patch: Partial<PaperHeader>) => void;
+  /** One question's answer space, or every question's (questionId null). */
+  setAnswerSpace: (questionId: string | null, space: AnswerSpace | null) => void;
   /** Whether the paper preview is on screen (not on a phone's "Pick" tab, not collapsed). */
   previewVisible: boolean;
   setPreviewVisible: (v: boolean) => void;
@@ -46,5 +48,9 @@ export const useBuilder = create<State>((set) => {
     move: (from, to) => edit((s) => ({ items: m.move(s.items, from, to) })),
     setTitle: (title) => edit(() => ({ title })),
     setHeader: (patch) => edit((s) => ({ header: { ...s.header, ...patch } })),
+    setAnswerSpace: (questionId, space) =>
+      edit((s) => ({
+        items: s.items.map((i) => (questionId === null || i.questionId === questionId ? { ...i, answerSpace: space } : i)),
+      })),
   };
 });

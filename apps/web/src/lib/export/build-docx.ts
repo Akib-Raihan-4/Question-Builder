@@ -1,5 +1,5 @@
 import type { PaperHeader } from "@/db/schema";
-import { itemMarks, itemRegions, totalMarks, type Bank, type Item } from "@/lib/builder/model";
+import { itemBlocks, itemMarks, totalMarks, type Bank, type Item } from "@/lib/builder/model";
 import { processorFetch } from "@/lib/processor";
 import type { ExportBranding } from "@/lib/watermark";
 
@@ -38,7 +38,14 @@ export async function buildPaperDocx(input: {
       number: i + 1, // serial = position + 1, never stored
       marks: itemMarks(it, bank),
       paper_id: bank[it.questionId].paperId,
-      regions: itemRegions(it, bank).map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1 })),
+      // Crops of the original plus any added answer lines / blank space (same as the PDF).
+      blocks: itemBlocks(it, bank).map((b) =>
+        b.kind === "crop"
+          ? { kind: "crop", page: b.region.page, x0: b.region.x0, y0: b.region.y0, x1: b.region.x1, y1: b.region.y1 }
+          : b.kind === "lines"
+            ? { kind: "lines", count: b.count }
+            : { kind: "space", h: b.h },
+      ),
     })),
   };
   const form = new FormData();

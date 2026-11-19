@@ -9,6 +9,7 @@ from cover import read_cover
 from docx_export import DocxSpec, build_docx
 from parsers import PARSERS, get_parser
 from parsers.base import SegmentResult
+from page_layout import LayoutResult, paper_layout
 
 def require_key(x_processor_key: str | None = Header(default=None)) -> None:
     """When PROCESSOR_KEY is set (always, when hosted), every call except /health must send it.
@@ -36,6 +37,15 @@ async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) 
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return parser.segment(data)
+
+
+@app.post("/layout", response_model=LayoutResult, dependencies=[Depends(require_key)])
+async def layout(file: UploadFile = File(...)) -> LayoutResult:
+    """Where text, drawings and answer dots are on every page (for removing answer space)."""
+    data = await file.read()
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, "Not a PDF")
+    return paper_layout(data)
 
 
 @app.post("/inspect", dependencies=[Depends(require_key)])

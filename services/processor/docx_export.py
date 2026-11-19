@@ -17,6 +17,7 @@ import io
 import math
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 import pymupdf
 from docx import Document
@@ -46,11 +47,29 @@ class XRegion(BaseModel):
     y1: float
 
 
+class XBlock(BaseModel):
+    """What to draw, top to bottom: a crop of the original, dotted answer lines, or blank space."""
+    kind: Literal["crop", "lines", "space"] = "crop"
+    page: int = 0
+    x0: float = 0
+    y0: float = 0
+    x1: float = 0
+    y1: float = 0
+    count: int = 0  # lines
+    h: float = 0  # space, in points
+
+
 class XItem(BaseModel):
     number: int
     marks: int
     paper_id: str
-    regions: list[XRegion]
+    regions: list[XRegion] = []  # older callers: crops only
+    blocks: list[XBlock] | None = None
+
+    def all_blocks(self) -> list[XBlock]:
+        if self.blocks is not None:
+            return self.blocks
+        return [XBlock(kind="crop", page=r.page, x0=r.x0, y0=r.y0, x1=r.x1, y1=r.y1) for r in self.regions]
 
 
 class XHeader(BaseModel):
@@ -104,6 +123,32 @@ def _no_borders(table) -> None:
         el.set(qn("w:val"), "nil")
         borders.append(el)
     tbl_pr.append(borders)
+
+
+LINE_PITCH = 28.0  # pt, same as the web app's answer lines
+
+
+def _answer_lines(container, count: int) -> None:
+    """Dotted answer lines: empty paragraphs of fixed height with a dotted bottom border."""
+    for i in range(count):
+        p = container.add_paragraph()
+        fmt = p.paragraph_format
+        fmt.space_before = Pt(6 if i == 0 else 0)
+        fmt.space_after = Pt(0)
+        fmt.line_spacing = Pt(LINE_PITCH)
+        p_pr = p._p.get_or_add_pPr()
+        bdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        for k, v in (("val", "dotted"), ("sz", "6"), ("space", "1"), ("color", "595959")):
+            bottom.set(qn(f"w:{k}"), v)
+        bdr.append(bottom)
+        p_pr.append(bdr)
+
+
+def _blank_space(container, h: float) -> None:
+    p = container.add_paragraph()
+    p.paragraph_format.space_before = Pt(min(h, MAX_SPACE))
+    p.paragraph_format.space_after = Pt(0)
 
 
 def _bottom_rule(paragraph) -> None:
@@ -416,9 +461,17 @@ def _build(spec: DocxSpec, pdfs: dict[str, bytes], logo: bytes | None, wm_png: b
         num_cell.paragraphs[0].add_run(str(item.number)).bold = True
         body._tc.remove(body.paragraphs[0]._p)  # start empty
 
-        widest = max((r.x1 - r.x0) for r in item.regions) if item.regions else 1
+        blocks = item.all_blocks()
+        crops = [b for b in blocks if b.kind == "crop"]
+        widest = max((b.x1 - b.x0) for b in crops) if crops else 1
         scale = min(1.0, CONTENT_W_PT / widest)
-        for i, r in enumerate(item.regions):
+        for i, r in enumerate(blocks):
+            if r.kind == "lines":
+                _answer_lines(body, r.count)
+                continue
+            if r.kind == "space":
+                _blank_space(body, r.h)
+                continue
             page = src[r.page]
             rect = pymupdf.Rect(r.x0, r.y0, r.x1, r.y1) & page.rect
             if spec.mode == "editable":

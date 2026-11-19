@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { processorFetch } from "@/lib/processor";
+import { saveLayout } from "@/lib/papers/layout";
 import { getObjectBytes } from "@/lib/storage";
 
 /** JSON contract returned by services/processor (POST /segment/qp). Coordinates: PDF pt, top-left. */
@@ -206,5 +207,6 @@ export async function runSegmentPaper(paperId: string) {
   const pdf = await getObjectBytes(paper.fileKey);
   const result = await callProcessor(paper.parserKey, pdf);
   await saveSegmentResult(paperId, result);
+  await saveLayout(paperId, pdf);
   return { questions: result.questions.length, status: result.status };
 }

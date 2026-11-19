@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import type { PaperHeader } from "@/db/schema";
 import type { Role } from "@/lib/auth";
 import type { BankQuestion, Item } from "./model";
+import { removableGaps } from "./answer-space";
 
 export const paperLabel = (p: { paperCode: string; series: string; year: number }) =>
   `${p.paperCode} ${p.series} ${p.year}`;
@@ -36,7 +37,10 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
       : null;
   if (!cond) return [];
   const qs = await db
-    .select({ q: schema.questions, p: schema.papers })
+    .select({
+      q: schema.questions,
+      p: { id: schema.papers.id, paperCode: schema.papers.paperCode, series: schema.papers.series, year: schema.papers.year },
+    })
     .from(schema.questions)
     .innerJoin(schema.papers, eq(schema.papers.id, schema.questions.paperId))
     .where(cond)
@@ -53,8 +57,25 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
     .from(schema.regions)
     .where(inArray(schema.regions.ownerId, [...qIds, ...parts.map((p) => p.id)]))
     .orderBy(asc(schema.regions.page), asc(schema.regions.y0));
+  // Each paper's page layout once, to work out what "remove answer space" may cut from each box.
+  const layouts = new Map(
+    (
+      await db
+        .select({ id: schema.papers.id, layout: schema.papers.layout })
+        .from(schema.papers)
+        .where(inArray(schema.papers.id, [...new Set(qs.map((x) => x.p.id))]))
+    ).map((x) => [x.id, x.layout]),
+  );
+  const paperOf = new Map<string, string>(qs.map((x) => [x.q.id, x.p.id]));
+  for (const pt of parts) paperOf.set(pt.id, paperOf.get(pt.questionId)!);
   const reg = (ownerId: string) =>
-    regions.filter((r) => r.ownerId === ownerId).map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1 }));
+    regions
+      .filter((r) => r.ownerId === ownerId)
+      .map(({ page, x0, y0, x1, y1 }) => {
+        const region = { page, x0, y0, x1, y1 };
+        const gaps = removableGaps(region, layouts.get(paperOf.get(ownerId)!)?.pages[page]);
+        return gaps.length ? { ...region, gaps } : region;
+      });
   return qs.map(({ q, p }) => ({
     id: q.id,
     paperId: p.id,
@@ -89,7 +110,7 @@ export async function getBuiltPaper(id: string, ownerId: string) {
     .from(schema.builtPaperItems)
     .where(eq(schema.builtPaperItems.builtPaperId, id))
     .orderBy(asc(schema.builtPaperItems.position));
-  const items: Item[] = rows.map((r) => ({ questionId: r.questionId, partIds: r.partIds }));
+  const items: Item[] = rows.map((r) => ({ questionId: r.questionId, partIds: r.partIds, answerSpace: r.answerSpace }));
   const bank = await loadBankQuestions({ questionIds: items.map((i) => i.questionId) });
   return { id: bp.id, title: bp.title, header: bp.headerJson as PaperHeader, items, bank, updatedAt: bp.updatedAt };
 }

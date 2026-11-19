@@ -19,6 +19,17 @@ import {
 
 export const userRole = pgEnum("user_role", ["admin", "teacher"]);
 /** New sign-ups wait as "pending" until an admin approves them (rejecting deletes the account). */
+/** [x0, y0, x1, y1] in PDF points, top-left origin. */
+export type Box = [number, number, number, number];
+export type PaperLayout = { version: number; pages: { ink: Box[]; dots: Box[] }[] };
+
+export type AnswerSpace = {
+  /** Drop the past paper's own answer lines and blank working space. */
+  remove?: boolean;
+  /** Add after the question (above its Total line): dotted lines, or blank space in cm. */
+  add?: { kind: "lines" | "space"; amount: number };
+};
+
 export const accountStatus = pgEnum("account_status", ["pending", "active"]);
 
 export const user = pgTable("user", {
@@ -141,6 +152,8 @@ export const papers = pgTable(
     parserVersion: text("parser_version"),
     status: paperStatus("status").notNull().default("uploaded"),
     statusReason: text("status_reason"),
+    /** Where text, drawings and answer dots are on each page (processor /layout). Used to remove answer space. */
+    layout: jsonb("layout").$type<PaperLayout>(),
     /** Admin split/merged questions or added/removed parts: a parser re-run would undo that. */
     structureEdited: boolean("structure_edited").notNull().default(false),
     publishedAt: timestamp("published_at"),
@@ -309,6 +322,8 @@ export const builtPaperItems = pgTable(
       .notNull()
       .references(() => questions.id),
     partIds: jsonb("part_ids").$type<string[]>().notNull().default([]), // [] = whole question
+    /** Remove the original answer space and/or add lines or blank space after the question. */
+    answerSpace: jsonb("answer_space").$type<AnswerSpace>(),
   },
   (t) => [index("built_paper_items_paper_idx").on(t.builtPaperId, t.position)],
 );
