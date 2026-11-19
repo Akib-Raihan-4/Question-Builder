@@ -11,6 +11,7 @@ import { isRegional, parsePaperFilename, SERIES, withRegional } from "@/lib/pape
 import { matchSubject, MAX_UPLOAD_BYTES } from "@/lib/papers/match";
 import { cn } from "@/lib/utils";
 import { Select } from "@/components/ui/select";
+import { postWithProgress } from "@/lib/upload";
 
 export type Subject = { id: string; name: string; specCode: string; qualification: string };
 type BulkRow = { file: string; ok: boolean; message: string };
@@ -78,6 +79,7 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
   const [note, setNote] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState<number | null>(null); // upload progress 0–1
 
   useEffect(() => {
     if (defaultSubjectId) setSubjectId(defaultSubjectId);
@@ -139,10 +141,19 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
     const fd = new FormData(e.currentTarget);
     fd.set("autoDetect", String(autoDetect));
     fd.set("paperCode", withRegional(paperCode, regional));
-    const res = await fetch("/api/admin/papers", { method: "POST", body: fd });
-    const body = await res.json().catch(() => ({}));
+    setSent(0);
+    let res: { ok: boolean; body: Record<string, unknown> };
+    try {
+      res = await postWithProgress("/api/admin/papers", fd, setSent);
+    } catch (err) {
+      setPending(false);
+      setSent(null);
+      return setMsg({ ok: false, text: (err as Error).message });
+    }
+    const body = res.body;
     setPending(false);
-    if (!res.ok) return setMsg({ ok: false, text: body.error ?? "Upload failed" });
+    setSent(null);
+    if (!res.ok) return setMsg({ ok: false, text: String(body.error ?? "Upload failed") });
     setMsg({
       ok: true,
       text: autoDetect ? `Uploaded ${paperCode} ${series} ${year} — finding questions…` : `Uploaded ${paperCode} ${series} ${year} — open Review to mark its questions.`,
@@ -234,7 +245,9 @@ function SingleUpload({ subjects, defaultSubjectId }: { subjects: Subject[]; def
         <Input id="year" name="year" type="number" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value)} required />
       </div>
       <div className="flex items-end">
-        <Button type="submit" disabled={pending || reading} className="w-full">{pending ? "Uploading…" : "Upload paper"}</Button>
+        <Button type="submit" disabled={pending || reading} className="w-full">
+          {pending ? (sent !== null && sent < 1 ? `Uploading ${Math.round(sent * 100)}%` : "Saving…") : "Upload paper"}
+        </Button>
       </div>
       <div className="sm:col-span-2 lg:col-span-3">
         <AutoDetect value={autoDetect} onChange={setAutoDetect} />

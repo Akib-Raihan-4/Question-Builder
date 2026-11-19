@@ -13,6 +13,8 @@ import { HScroll } from "@/components/h-scroll";
 import { printedPart } from "@/lib/mark-schemes/link";
 import type { MarkSchemeReview, MsRowView } from "@/lib/mark-schemes/server";
 import { cn } from "@/lib/utils";
+import { postWithProgress } from "@/lib/upload";
+import { DrawBoxDialog } from "./draw-box-dialog";
 
 type Box = { page: number; x0: number; y0: number; x1: number; y1: number };
 type Q = { id: string; number: number; totalMarks: number; parts: { id: string; label: string; marks: number }[] };
@@ -59,7 +61,10 @@ export function MarkSchemeScreen({
 }) {
   const [ms, setMs] = useState(initial);
   const [busy, setBusy] = useState(false);
+  // Upload progress: 0–1 while the file is being sent, then "saving" until the server answers.
+  const [sending, setSending] = useState<{ name: string; fraction: number } | null>(null);
   const [filter, setFilter] = useState<"all" | "look">("all");
+  const [drawFor, setDrawFor] = useState<Slot | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const base = `/api/admin/papers/${paper.id}/mark-scheme`;
@@ -107,7 +112,19 @@ export function MarkSchemeScreen({
     if (ms && !(await confirmDialog({ title: "Replace the mark scheme?", body: "Its rows are read again from the new file; links you fixed by hand are lost.", confirmLabel: "Replace" }))) return;
     const fd = new FormData();
     fd.append("file", file);
-    await run(() => call(base, { method: "POST", body: fd }), "Uploaded — reading the mark scheme…");
+    setSending({ name: file.name, fraction: 0 });
+    setBusy(true);
+    try {
+      const res = await postWithProgress(base, fd, (fraction) => setSending({ name: file.name, fraction }));
+      if (!res.ok) throw new Error(String(res.body.error ?? "Upload failed"));
+      await reload();
+      toast("Uploaded — reading the mark scheme…");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setSending(null);
+      setBusy(false);
+    }
   }
 
   const rows = useMemo(() => ms?.rows ?? [], [ms]);
@@ -128,6 +145,17 @@ export function MarkSchemeScreen({
     return st.includes("missing") ? "missing" : st.includes("differ") ? "differ" : st.includes("unknown") ? "unknown" : "ok";
   };
   const [statusLabel, statusCls] = STATUS[ms?.status ?? "uploaded"];
+  // Where to open the drawing view: this question's rows, else the end of the question before it.
+  const startPageFor = (slot: Slot) => {
+    const own = rows.filter((r) => r.questionId === slot.questionId).flatMap((r) => r.regions.map((g) => g.page));
+    if (own.length) return Math.min(...own);
+    const qi = questions.findIndex((q) => q.id === slot.questionId);
+    for (let k = qi - 1; k >= 0; k--) {
+      const prev = rows.filter((r) => r.questionId === questions[k].id).flatMap((r) => r.regions.map((g) => g.page));
+      if (prev.length) return Math.max(...prev);
+    }
+    return undefined;
+  };
 
   return (
     <div className="space-y-5">
@@ -195,12 +223,36 @@ export function MarkSchemeScreen({
         </div>
       </div>
 
+      {sending && <UploadProgress name={sending.name} fraction={sending.fraction} />}
+      {drawFor && ms && (
+        <DrawBoxDialog
+          paperId={paper.id}
+          title={drawFor.title}
+          rows={rows}
+          startPage={startPageFor(drawFor)}
+          onClose={() => setDrawFor(null)}
+          onSave={async (boxes) => {
+            const slot = drawFor;
+            setDrawFor(null);
+            await run(
+              () => call(`${base}/rows`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questionId: slot.questionId, partId: slot.partId, boxes }) }),
+              `Box added to ${slot.title}`,
+            );
+          }}
+        />
+      )}
       {!ms ? (
         <EmptyState title="No mark scheme yet" action={<Button onClick={() => fileRef.current?.click()}>Upload mark scheme</Button>}>
           Upload this paper&apos;s mark scheme PDF. Its rows are found and matched to the questions automatically.
         </EmptyState>
       ) : ms.status === "processing" ? (
-        <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">Reading the mark scheme… this takes a few seconds.</p>
+        <div className="rounded-lg bg-sky-50 px-3 py-3 text-sm text-sky-900" role="status">
+          <div className="flex items-center gap-2">
+            <span className="size-3 animate-spin rounded-full border-2 border-sky-700 border-t-transparent" aria-hidden />
+            Reading the mark scheme and matching its rows to the questions…
+          </div>
+          <p className="mt-1 text-xs text-sky-800/80">Usually 5–20 seconds (up to a minute if the processor was asleep). This page updates by itself.</p>
+        </div>
       ) : (
         <>
           {ms.status === "failed" && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900">{ms.statusReason}</p>}
@@ -318,10 +370,24 @@ export function MarkSchemeScreen({
                                 </div>
                               ))
                             ) : (
-                              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                No row is linked to this part. If a row above isn&apos;t matched, link it here with its “Link to” menu.
+                              <p className="mb-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                No mark scheme row for this part yet. Pick one of the mark scheme&apos;s rows below, or draw a box round it on the mark scheme.
                               </p>
                             )}
+                            <SlotTools
+                              slot={s}
+                              collapsed={linked.length > 0}
+                              rows={rows}
+                              questions={questions}
+                              busy={busy}
+                              onLink={(label) =>
+                                run(
+                                  () => call(`${base}/rows`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label, questionId: s.questionId, partId: s.partId }) }),
+                                  `Row ${label} linked to ${s.title}`,
+                                )
+                              }
+                              onDraw={() => setDrawFor(s)}
+                            />
                           </figure>
                         </div>
                       </div>
@@ -450,6 +516,79 @@ function RowTools({
           Wrong row?
         </button>
       )}
+    </div>
+  );
+}
+
+function UploadProgress({ name, fraction }: { name: string; fraction: number }) {
+  const sent = fraction >= 1;
+  return (
+    <div className="rounded-lg border bg-background px-3 py-3 text-sm" role="status" aria-live="polite">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate">
+          {sent ? "Saving" : "Uploading"} <span className="font-medium">{name}</span>…
+        </span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">{sent ? "" : `${Math.round(fraction * 100)}%`}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full rounded-full bg-primary transition-[width]", sent && "w-full animate-pulse")} style={sent ? undefined : { width: `${Math.max(4, fraction * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** Under each part: give it a row from the mark scheme (any row, matched or not), or draw one. */
+function SlotTools({
+  slot,
+  collapsed,
+  rows,
+  questions,
+  busy,
+  onLink,
+  onDraw,
+}: {
+  slot: Slot;
+  /** The part already has a row: keep the tools behind a small link. */
+  collapsed?: boolean;
+  rows: MsRowView[];
+  questions: Q[];
+  busy: boolean;
+  onLink: (label: string) => void;
+  onDraw: () => void;
+}) {
+  const where = (r: MsRowView) => {
+    if (!r.questionId) return "not matched";
+    const q = questions.find((x) => x.id === r.questionId);
+    const p = q?.parts.find((x) => x.id === r.partId);
+    return q ? `now on Q${q.number}${p ? printedPart(p.label) : ""}` : "";
+  };
+  const candidates = rows.filter((r) => !(r.questionId === slot.questionId && r.partId === slot.partId));
+  const [open, setOpen] = useState(!collapsed);
+  if (!open) {
+    return (
+      <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => setOpen(true)}>
+        + Add another row or draw a box
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {candidates.length > 0 && (
+        <Select
+          aria-label={`Use a mark scheme row for ${slot.title}`}
+          value=""
+          placeholder="Use a row from the mark scheme…"
+          className="h-8 min-w-[14rem] text-xs"
+          disabled={busy}
+          onValueChange={onLink}
+          options={[...candidates]
+            .sort((a, b) => Number(Boolean(a.questionId)) - Number(Boolean(b.questionId)))
+            .map((r) => ({ value: r.label, label: r.label, hint: where(r), group: r.questionId ? "Other rows" : "Not matched yet" }))}
+        />
+      )}
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onDraw}>
+        Draw a box
+      </Button>
     </div>
   );
 }

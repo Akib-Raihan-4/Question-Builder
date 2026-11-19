@@ -36,7 +36,7 @@ export function rowsForItem(item: Item, rows: MsRowInput[]): MsRowInput[] {
 }
 
 /** The row's label with the question's NEW number: "4(b)(ii)" for item 2 → "2(b)(ii)". */
-export const renumber = (label: string, serial: number) => label.replace(/^\s*\d+/, String(serial));
+export const renumber = (label: string, serial: number) => label.replace(/\s*\(drawn[^)]*\)\s*$/, "").replace(/^\s*\d+/, String(serial));
 
 function safe(text: string, font: PDFFont) {
   let out = "";
