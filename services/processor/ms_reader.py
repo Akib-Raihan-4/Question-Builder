@@ -21,7 +21,7 @@ import re
 import pymupdf
 from pydantic import BaseModel, Field
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 LABEL = re.compile(r"^(\d{1,2})?((?:\([a-z]{1,2}\))*)((?:\([ivx]+\))*)\*?$")
 
 
@@ -38,6 +38,7 @@ class MsRow(BaseModel):
     question: int  # 1
     part: str | None  # "a(i)" — our part label format; None = the whole question
     regions: list[MsRegion] = Field(default_factory=list)
+    marks: int | None = None  # the row's total from the Mark column, when printed
 
 
 class MsResult(BaseModel):
@@ -164,6 +165,9 @@ def read_mark_scheme(data: bytes) -> MsResult:
         in_band = lambda y: y_lo - 1 <= y <= y_hi + 1  # noqa: E731
         seg_vs = [v for v in vs if v[2] > y_lo and v[1] < y_hi]
         table_right = max([v[0] for v in seg_vs if v[0] > lx1] or [page.rect.width - 40])
+        # The Mark column: between the last two vertical rules (or the table's last ~45 pt).
+        cols = sorted({round(v[0]) for v in seg_vs if v[0] > lx1 + 20})
+        mark_left = cols[-2] if len(cols) >= 2 and table_right - cols[-2] < 90 else table_right - 45
         bounds = _merge([y for (y, x0, x1) in hs if x0 <= lx0 + 6 and x1 >= lx1 - 6 and in_band(y)])
         below = [y for y in bounds if y > header_bottom - 3]  # the rule under the header row starts the first row
         label_words = [w for w in words if w[0] >= lx0 - 1 and w[2] <= lx1 + 2 and header_bottom < (w[1] + w[3]) / 2 < y_hi]
@@ -190,6 +194,9 @@ def read_mark_scheme(data: bytes) -> MsResult:
             last = max([w[3] for w in inside] + [min(y, bottom) for y in art] or [top])
             y1 = min(bottom - 0.5, last + 8) if bottom - last > 30 else bottom - 0.5
             region = MsRegion(page=pi, x0=round(lx1 + 1, 1), y0=round(top + 0.5, 1), x1=round(table_right - 0.5, 1), y1=round(y1, 1))
+            # The row's total in the Mark column: "2", or "(2)" on some papers.
+            totals = [w for w in inside if w[0] >= mark_left - 2 and re.fullmatch(r"\(?\d{1,2}\)?", w[4])]
+            row_marks = int(sorted(totals, key=lambda w: w[1])[-1][4].strip("()")) if totals else None
             if re.match(r"^\s*total\b", text, re.I) or re.match(r"^\s*total for question", body, re.I):
                 state["current"] = None  # question total row: ends the question, not cropped
                 continue
@@ -199,11 +206,13 @@ def read_mark_scheme(data: bytes) -> MsResult:
             if parsed:
                 q, letter, roman = parsed
                 state["context"] = (q, letter)
-                state["current"] = MsRow(label=label_text(q, letter, roman), question=q, part=part_label(letter, roman), regions=[region])
+                state["current"] = MsRow(label=label_text(q, letter, roman), question=q, part=part_label(letter, roman), regions=[region], marks=row_marks)
                 rows.append(state["current"])
             elif not text.strip() and state["current"] is not None:
                 if inside:  # the row continues (usually onto a new page); empty strips are skipped
                     state["current"].regions.append(region)
+                    if row_marks is not None:
+                        state["current"].marks = row_marks
             elif text.strip() and rows:  # before the first real label: guidance pages, not rows
                 res.warnings.append(f"Page {pi + 1}: couldn't read the label {text!r}")
         return True

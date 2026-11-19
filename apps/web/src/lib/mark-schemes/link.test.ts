@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverage, coverageSummary, linkRows, type QuestionRef } from "./link";
+import { coverage, coverageSummary, linkRows, markChecks, type QuestionRef } from "./link";
 
 const reg = [{ page: 4, x0: 96, y0: 70, x1: 552, y1: 96 }];
 const qs: QuestionRef[] = [
@@ -46,5 +46,24 @@ describe("coverage", () => {
     expect(c).toEqual({ missing: ["Q1(a)(ii)", "Q1(b)", "Q3"], unlinked: ["7(b)"] });
     expect(coverageSummary(c)).toBe("No mark scheme row for Q1(a)(ii), Q1(b), Q3. 1 row not matched to a question (7(b)).");
     expect(coverageSummary({ missing: [], unlinked: [] })).toBeNull();
+  });
+});
+
+
+describe("markChecks", () => {
+  const qm: QuestionRef[] = [
+    { id: "q1", number: 1, totalMarks: 5, parts: [{ id: "a", label: "a", marks: 2 }, { id: "b", label: "b", marks: 3 }] },
+    { id: "q2", number: 2, totalMarks: 4, parts: [] },
+  ];
+  it("adds up each part's rows and compares with the paper", () => {
+    const m = markChecks(qm, [
+      { questionId: "q1", partId: "a", marks: 1 },
+      { questionId: "q1", partId: "a", marks: 1 }, // a(i) + a(ii) → 2
+      { questionId: "q1", partId: "b", marks: 2 }, // paper says 3
+      { questionId: "q2", partId: null, marks: null },
+    ]);
+    expect(m.get("a")).toEqual({ check: "match", ms: 2, paper: 2 });
+    expect(m.get("b")).toEqual({ check: "differ", ms: 2, paper: 3 });
+    expect(m.get("q2")?.check).toBe("unknown");
   });
 });

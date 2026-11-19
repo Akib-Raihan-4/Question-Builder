@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CropCanvas } from "@/components/pdf/crop-canvas";
 import { msDocKey } from "@/components/pdf/pdf-cache";
 import { confirmDialog, toast } from "@/components/feedback";
@@ -9,11 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
+import { HScroll } from "@/components/h-scroll";
 import { printedPart } from "@/lib/mark-schemes/link";
 import type { MarkSchemeReview, MsRowView } from "@/lib/mark-schemes/server";
 import { cn } from "@/lib/utils";
 
+type Box = { page: number; x0: number; y0: number; x1: number; y1: number };
 type Q = { id: string; number: number; totalMarks: number; parts: { id: string; label: string; marks: number }[] };
+type Slot = { key: string; questionId: string; partId: string | null; title: string; marks: number };
+type SlotState = "ok" | "differ" | "unknown" | "missing";
 
 const STATUS: Record<string, [string, string]> = {
   processing: ["Reading…", "bg-sky-100 text-sky-800"],
@@ -30,31 +34,61 @@ async function call(url: string, init?: RequestInit) {
   return body;
 }
 
-/** Admin: upload a paper's mark scheme, check every part has its row, fix links, publish. */
-export function MarkSchemeScreen({ paper, questions, initial }: { paper: { id: string; label: string; subject: string; status: string }; questions: Q[]; initial: MarkSchemeReview | null }) {
+/** The parts to check for a question: each part, or the whole question when it has none (or a whole-question row). */
+function slotsFor(q: Q, rows: MsRowView[]): Slot[] {
+  const whole = rows.some((r) => r.questionId === q.id && r.partId === null);
+  if (!q.parts.length || whole) return [{ key: q.id, questionId: q.id, partId: null, title: `Q${q.number}`, marks: q.totalMarks }];
+  return q.parts.map((p) => ({ key: p.id, questionId: q.id, partId: p.id, title: `Q${q.number}${printedPart(p.label)}`, marks: p.marks }));
+}
+
+/**
+ * Admin: check a paper's mark scheme. Each part of the question paper is shown beside the mark
+ * scheme row(s) linked to it, with an automatic marks check (the mark scheme's total for the
+ * part = the paper's marks). Only parts that need a look are flagged.
+ */
+export function MarkSchemeScreen({
+  paper,
+  questions,
+  paperRegions,
+  initial,
+}: {
+  paper: { id: string; label: string; subject: string; status: string };
+  questions: Q[];
+  paperRegions: Record<string, Box[]>;
+  initial: MarkSchemeReview | null;
+}) {
   const [ms, setMs] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<"all" | "look">("all");
+  const [checked, setChecked] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [width, setWidth] = useState(560);
-  const listRef = useRef<HTMLDivElement>(null);
   const base = `/api/admin/papers/${paper.id}/mark-scheme`;
+  const storeKey = ms ? `ms-checked:${ms.id}:${ms.updatedAt}` : "";
 
   const reload = useCallback(async () => setMs(await call(base)), [base]);
 
-  // While it's being read, check again every 2 s.
   useEffect(() => {
     if (ms?.status !== "processing") return;
     const t = setInterval(() => void reload().catch(() => {}), 2000);
     return () => clearInterval(t);
   }, [ms?.status, reload]);
 
+  // "Looks right" ticks are just for the admin's own progress, kept in this browser.
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(Math.min(620, el.clientWidth - 140)));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    try {
+      setChecked(storeKey ? JSON.parse(localStorage.getItem(storeKey) ?? "[]") : []);
+    } catch {
+      setChecked([]);
+    }
+  }, [storeKey]);
+  const toggleChecked = (qId: string) =>
+    setChecked((c) => {
+      const next = c.includes(qId) ? c.filter((x) => x !== qId) : [...c, qId];
+      try {
+        localStorage.setItem(storeKey, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
     setBusy(true);
@@ -76,25 +110,37 @@ export function MarkSchemeScreen({ paper, questions, initial }: { paper: { id: s
     await run(() => call(base, { method: "POST", body: fd }), "Uploaded — reading the mark scheme…");
   }
 
-  const rowsFor = (qId: string, partId: string | null) => (ms?.rows ?? []).filter((r) => r.questionId === qId && r.partId === partId);
-  const unlinked = (ms?.rows ?? []).filter((r) => !r.questionId);
-  const missing = new Set(ms?.coverage.missing ?? []);
-  const [label, cls] = STATUS[ms?.status ?? "uploaded"];
+  const rows = useMemo(() => ms?.rows ?? [], [ms]);
+  const rowsFor = (s: Slot) => rows.filter((r) => r.questionId === s.questionId && r.partId === s.partId);
+  const stateOf = (s: Slot): SlotState => {
+    if (!rowsFor(s).length) return "missing";
+    const c = ms?.checks?.[s.key]?.check;
+    return c === "match" ? "ok" : c === "differ" ? "differ" : "unknown";
+  };
+  const allSlots = questions.flatMap((q) => slotsFor(q, rows));
+  const counts = { ok: 0, differ: 0, unknown: 0, missing: 0 } as Record<SlotState, number>;
+  for (const s of allSlots) counts[stateOf(s)]++;
+  const unlinked = rows.filter((r) => !r.questionId);
+  const needsLook = counts.differ + counts.unknown + counts.missing + unlinked.length;
   const complete = ms && !ms.coverage.missing.length && !ms.coverage.unlinked.length;
+  const questionState = (q: Q): SlotState => {
+    const st = slotsFor(q, rows).map(stateOf);
+    return st.includes("missing") ? "missing" : st.includes("differ") ? "differ" : st.includes("unknown") ? "unknown" : "ok";
+  };
+  const [statusLabel, statusCls] = STATUS[ms?.status ?? "uploaded"];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Title and actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <Link href={`/admin/papers/${paper.id}`} className="text-sm text-muted-foreground hover:text-foreground">
             ← {paper.label} questions
           </Link>
           <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight">
-            Mark scheme {ms && <Badge className={cls}>{label}</Badge>}
+            Mark scheme {ms && <Badge className={statusCls}>{statusLabel}</Badge>}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {paper.subject} · {paper.label}. Each part of each question needs its row from the mark scheme. Teachers can export it once it&apos;s published.
-          </p>
+          <p className="text-sm text-muted-foreground">{paper.subject} · {paper.label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -109,28 +155,12 @@ export function MarkSchemeScreen({ paper, questions, initial }: { paper: { id: s
               if (f) void upload(f);
             }}
           />
-          <Button variant={ms ? "outline" : "default"} size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-            {ms ? "Replace PDF" : "Upload mark scheme"}
-          </Button>
           {ms && (
             <>
-              <Button variant="outline" size="sm" disabled={busy || ms.status === "processing"} onClick={() => run(() => call(`${base}/reprocess`, { method: "POST" }), "Reading again…")}>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>Replace PDF</Button>
+              <Button variant="ghost" size="sm" disabled={busy || ms.status === "processing"} onClick={() => run(() => call(`${base}/reprocess`, { method: "POST" }), "Reading again…")}>
                 Re-read
               </Button>
-              {ms.status === "published" ? (
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => run(() => call(`${base}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publish: false }) }), "Unpublished")}>
-                  Unpublish
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={busy || !complete || ms.status === "processing"}
-                  title={complete ? "Teachers can export this mark scheme" : "Every part needs a row first"}
-                  onClick={() => run(() => call(`${base}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }), "Published — teachers can export it")}
-                >
-                  Publish
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -143,6 +173,23 @@ export function MarkSchemeScreen({ paper, questions, initial }: { paper: { id: s
               >
                 Delete
               </Button>
+              {ms.status === "published" ? (
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => run(() => call(`${base}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publish: false }) }), "Unpublished")}>
+                  Unpublish
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={busy || !complete || ms.status === "processing"}
+                  title={complete ? "Teachers can export this mark scheme" : "Every part needs a row first"}
+                  onClick={async () => {
+                    if (counts.differ && !(await confirmDialog({ title: "Publish anyway?", body: `${counts.differ} part${counts.differ === 1 ? "'s" : "s'"} mark scheme marks don't match the paper.`, confirmLabel: "Publish" }))) return;
+                    await run(() => call(`${base}/publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }), "Published — teachers can export it");
+                  }}
+                >
+                  Publish
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -150,90 +197,211 @@ export function MarkSchemeScreen({ paper, questions, initial }: { paper: { id: s
 
       {!ms ? (
         <EmptyState title="No mark scheme yet" action={<Button onClick={() => fileRef.current?.click()}>Upload mark scheme</Button>}>
-          Upload the PDF of this paper&apos;s mark scheme. Its rows are found and matched to the questions automatically.
+          Upload this paper&apos;s mark scheme PDF. Its rows are found and matched to the questions automatically.
         </EmptyState>
+      ) : ms.status === "processing" ? (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">Reading the mark scheme… this takes a few seconds.</p>
       ) : (
         <>
-          {ms.status === "processing" && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">Reading the mark scheme… this takes a few seconds.</p>}
-          {ms.statusReason && ms.status !== "processing" && (
-            <p className={cn("rounded-lg px-3 py-2 text-sm", ms.status === "failed" ? "bg-red-50 text-red-900" : "bg-amber-50 text-amber-900")}>{ms.statusReason}</p>
-          )}
-          {complete && ms.status !== "published" && (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">Every part has its mark scheme row. Check a few below, then Publish.</p>
-          )}
+          {ms.status === "failed" && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900">{ms.statusReason}</p>}
+
+          {/* The check at a glance */}
+          <div className="sticky top-14 z-20 -mx-4 space-y-2 border-b bg-background/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-xl sm:border">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className={cn("font-medium", needsLook ? "text-amber-800" : "text-emerald-700")}>
+                {needsLook ? `${needsLook} to look at` : "✓ Everything matches"}
+              </span>
+              <span className="text-muted-foreground">
+                {counts.ok} of {allSlots.length} parts: mark scheme marks = paper marks
+                {counts.differ > 0 && ` · ${counts.differ} differ`}
+                {counts.unknown > 0 && ` · ${counts.unknown} without marks`}
+                {counts.missing > 0 && ` · ${counts.missing} without a row`}
+                {unlinked.length > 0 && ` · ${unlinked.length} unmatched row${unlinked.length === 1 ? "" : "s"}`}
+              </span>
+              <span className="text-muted-foreground">· {checked.length} of {questions.length} questions ticked</span>
+              <div className="ml-auto inline-flex rounded-lg bg-muted p-0.5 text-xs" role="radiogroup" aria-label="Show">
+                {(
+                  [
+                    ["all", "All parts"],
+                    ["look", `Needs a look (${needsLook})`],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button key={k} type="button" role="radio" aria-checked={filter === k} onClick={() => setFilter(k)} className={cn("rounded-md px-2.5 py-1", filter === k ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <HScroll label="questions">
+              {questions.map((q) => {
+                const st = questionState(q);
+                return (
+                  <a
+                    key={q.id}
+                    href={`#q-${q.id}`}
+                    className={cn(
+                      "shrink-0 rounded-md border px-2 py-0.5 text-xs tabular-nums",
+                      st === "ok" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : st === "missing" ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900",
+                      checked.includes(q.id) && "ring-2 ring-emerald-500",
+                    )}
+                    title={checked.includes(q.id) ? "Ticked as looking right" : undefined}
+                  >
+                    {checked.includes(q.id) ? "✓ " : ""}Q{q.number}
+                  </a>
+                );
+              })}
+            </HScroll>
+          </div>
 
           {unlinked.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="font-medium">Rows not matched to a question ({unlinked.length})</h2>
+            <section className="space-y-2 rounded-xl border border-red-200 bg-red-50/40 p-3">
+              <h2 className="text-sm font-medium text-red-900">Rows not matched to a question — link or remove them</h2>
               {unlinked.map((r) => (
-                <RowCard key={r.label} row={r} paperId={paper.id} width={width} questions={questions} busy={busy} onChange={run} base={base} />
+                <div key={r.label} className="rounded-lg border bg-background">
+                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} />
+                  <MsCrops row={r} paperId={paper.id} />
+                </div>
               ))}
             </section>
           )}
 
-          <div ref={listRef} className="space-y-4">
-            {questions.map((q) => {
-              const slots: { partId: string | null; title: string; marks: number }[] = q.parts.length
-                ? [...(rowsFor(q.id, null).length ? [{ partId: null, title: `Q${q.number} (whole question)`, marks: q.totalMarks }] : []), ...q.parts.map((p) => ({ partId: p.id, title: `Q${q.number}${printedPart(p.label)}`, marks: p.marks }))]
-                : [{ partId: null, title: `Q${q.number}`, marks: q.totalMarks }];
-              return (
-                <section key={q.id} className="rounded-xl border bg-background">
-                  <h2 className="border-b px-4 py-2 font-medium">
+          {questions.map((q) => {
+            const slots = slotsFor(q, rows).filter((s) => filter === "all" || stateOf(s) !== "ok");
+            if (!slots.length) return null;
+            const isChecked = checked.includes(q.id);
+            return (
+              <section key={q.id} id={`q-${q.id}`} className="scroll-mt-40 overflow-hidden rounded-xl border bg-background">
+                <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2">
+                  <h2 className="font-medium">
                     Question {q.number} <span className="text-sm font-normal text-muted-foreground">· {q.totalMarks} marks</span>
                   </h2>
-                  <div className="divide-y">
-                    {slots.map((slot) => {
-                      const rows = rowsFor(q.id, slot.partId);
-                      const isMissing = missing.has(slot.title);
-                      return (
-                        <div key={slot.partId ?? "whole"} className="flex flex-col gap-2 px-4 py-3 sm:flex-row">
-                          <div className="w-32 shrink-0 text-sm">
-                            <div className="font-medium">{slot.title}</div>
-                            <div className="text-xs text-muted-foreground">{slot.marks} mark{slot.marks === 1 ? "" : "s"}</div>
-                            {isMissing && <div className="mt-1 text-xs font-medium text-red-700">No row yet</div>}
-                          </div>
-                          <div className="min-w-0 flex-1 space-y-2">
-                            {rows.map((r) => (
-                              <RowCard key={r.label} row={r} paperId={paper.id} width={width} questions={questions} busy={busy} onChange={run} base={base} compact />
-                            ))}
-                            {!rows.length && !isMissing && <p className="text-xs text-muted-foreground">Covered by the whole-question row.</p>}
-                          </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleChecked(q.id)}
+                    aria-pressed={isChecked}
+                    className={cn("ml-auto rounded-md border px-2.5 py-1 text-xs pointer-coarse:py-2", isChecked ? "border-emerald-500 bg-emerald-600 text-white" : "hover:bg-muted")}
+                  >
+                    {isChecked ? "✓ Looks right" : "Looks right"}
+                  </button>
+                </div>
+                <div className="divide-y">
+                  {slots.map((s) => {
+                    const st = stateOf(s);
+                    const chk = ms.checks?.[s.key];
+                    const linked = rowsFor(s);
+                    return (
+                      <div key={s.key} className="p-3 sm:p-4">
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-semibold">{s.title}</span>
+                          <span className="text-muted-foreground">{s.marks} mark{s.marks === 1 ? "" : "s"} on the paper</span>
+                          <span
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-xs font-medium",
+                              st === "ok" ? "bg-emerald-50 text-emerald-700" : st === "missing" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800",
+                            )}
+                          >
+                            {st === "ok" ? "✓ Mark scheme gives the same marks" : st === "differ" ? `Mark scheme gives ${chk?.ms} — check it's the right row` : st === "unknown" ? "No marks printed — check by eye" : "No mark scheme row — link one below"}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <figure className="min-w-0">
+                            <figcaption className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Question paper</figcaption>
+                            <Crops paperId={paper.id} boxes={paperRegions[s.partId ?? s.questionId] ?? []} maxH={360} />
+                          </figure>
+                          <figure className="min-w-0">
+                            <figcaption className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Mark scheme</figcaption>
+                            {linked.length ? (
+                              linked.map((r) => (
+                                <div key={r.label} className="mb-2 rounded-lg border">
+                                  <MsCrops row={r} paperId={paper.id} />
+                                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} subtle />
+                                </div>
+                              ))
+                            ) : (
+                              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                No row is linked to this part. If a row above isn&apos;t matched, link it here with its “Link to” menu.
+                              </p>
+                            )}
+                          </figure>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+          {filter === "look" && needsLook === 0 && (
+            <EmptyState title="Nothing needs a look">Every part has a mark scheme row and the marks match the paper. Publish when you&apos;re happy.</EmptyState>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function RowCard({
+/** Crops scaled to the column's width (measured), cut off at maxH with a "Show all" toggle. */
+function Crops({ paperId, boxes, maxH }: { paperId: string; boxes: Box[]; maxH?: number }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(480);
+  const [open, setOpen] = useState(false);
+  const [tall, setTall] = useState(false);
+  useEffect(() => {
+    const o = outer.current;
+    const i = inner.current;
+    if (!o || !i) return;
+    const ro = new ResizeObserver(() => {
+      setWidth(o.clientWidth - 16);
+      setTall(maxH ? i.offsetHeight > maxH + 40 : false);
+    });
+    ro.observe(o);
+    ro.observe(i); // pictures load later and grow the content
+    return () => ro.disconnect();
+  }, [maxH]);
+  if (!boxes.length) return <p className="text-xs text-muted-foreground">No boxes.</p>;
+  const widest = Math.max(...boxes.map((b) => b.x1 - b.x0));
+  const scale = Math.min(1, width / widest);
+  return (
+    <div className="rounded-lg border bg-white">
+      <div ref={outer} className="relative overflow-hidden" style={!open && maxH ? { maxHeight: maxH } : undefined}>
+        <div ref={inner} className="space-y-1 p-2">
+          {boxes.map((b, i) => (
+            <CropCanvas key={i} paperId={paperId} page={b.page} rect={b} scale={scale} />
+          ))}
+        </div>
+        {!open && tall && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white" />}
+      </div>
+      {tall && (
+        <button type="button" onClick={() => setOpen((o) => !o)} className="w-full border-t py-1 text-xs text-muted-foreground hover:bg-muted">
+          {open ? "Show less" : "Show all"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MsCrops({ row, paperId }: { row: MsRowView; paperId: string }) {
+  return <Crops paperId={msDocKey(paperId)} boxes={row.regions} />;
+}
+
+/** Row label, its marks, and the (rarely needed) fixes: link elsewhere or remove. */
+function RowTools({
   row,
-  paperId,
-  width,
   questions,
   busy,
   onChange,
   base,
-  compact,
+  subtle,
 }: {
   row: MsRowView;
-  paperId: string;
-  width: number;
   questions: Q[];
   busy: boolean;
   onChange: (fn: () => Promise<unknown>, ok?: string) => Promise<void>;
   base: string;
-  compact?: boolean;
+  subtle?: boolean;
 }) {
-  const [open, setOpen] = useState(!compact);
-  const widest = Math.max(...row.regions.map((g) => g.x1 - g.x0));
-  const scale = Math.min(1, width / widest);
+  const [fixing, setFixing] = useState(!subtle);
   const options = [
     { value: "none", label: "Not linked" },
     ...questions.flatMap((q) => [
@@ -243,13 +411,14 @@ function RowCard({
   ];
   const value = row.questionId ? `${row.questionId}|${row.partId ?? ""}` : "none";
   return (
-    <div className={cn("rounded-lg border", !row.questionId && "border-red-300")}>
-      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs">
-        <span className="font-mono text-sm">{row.label}</span>
-        {row.edited && <span className="text-muted-foreground" title="Linked by hand">✎</span>}
-        <span className="text-muted-foreground">
-          {row.regions.length > 1 ? `${row.regions.length} pieces` : `page ${row.regions[0].page + 1}`}
-        </span>
+    <div className="flex flex-wrap items-center gap-2 border-t px-2 py-1.5 text-xs text-muted-foreground">
+      <span>
+        Row <span className="font-mono text-foreground">{row.label}</span>
+        {row.marks != null && ` · ${row.marks} mark${row.marks === 1 ? "" : "s"}`}
+        {row.regions.length > 1 && ` · ${row.regions.length} pieces`}
+        {row.edited && " · linked by hand"}
+      </span>
+      {fixing ? (
         <div className="ml-auto flex items-center gap-1">
           <Select
             aria-label={`Link row ${row.label} to`}
@@ -264,9 +433,6 @@ function RowCard({
             }}
             options={options}
           />
-          <button type="button" className="rounded px-1.5 py-1 hover:bg-muted" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-            {open ? "Hide" : "Show"}
-          </button>
           <button
             type="button"
             disabled={busy}
@@ -279,13 +445,10 @@ function RowCard({
             Remove
           </button>
         </div>
-      </div>
-      {open && (
-        <div className="space-y-1 overflow-x-auto border-t bg-white p-2">
-          {row.regions.map((g) => (
-            <CropCanvas key={g.id} paperId={msDocKey(paperId)} page={g.page} rect={g} scale={scale} />
-          ))}
-        </div>
+      ) : (
+        <button type="button" className="ml-auto rounded px-1.5 py-1 hover:bg-muted hover:text-foreground" onClick={() => setFixing(true)}>
+          Wrong row?
+        </button>
       )}
     </div>
   );

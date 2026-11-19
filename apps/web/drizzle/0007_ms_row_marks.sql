@@ -1,0 +1,1 @@
+ALTER TABLE "ms_regions" ADD COLUMN "marks" integer;

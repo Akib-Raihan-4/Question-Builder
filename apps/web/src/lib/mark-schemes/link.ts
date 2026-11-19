@@ -8,9 +8,16 @@ export type ReaderRow = {
   question: number;
   part: string | null; // "a(i)", null = whole question
   regions: { page: number; x0: number; y0: number; x1: number; y1: number }[];
+  /** The row's total from the Mark column, when printed. */
+  marks?: number | null;
 };
 
-export type QuestionRef = { id: string; number: number; parts: { id: string; label: string }[] };
+export type QuestionRef = {
+  id: string;
+  number: number;
+  totalMarks?: number;
+  parts: { id: string; label: string; marks?: number }[];
+};
 
 export type LinkedRow = ReaderRow & { questionId: string | null; partId: string | null };
 
@@ -60,6 +67,31 @@ export function coverage(questions: QuestionRef[], rows: { label: string; questi
   }
   const unlinked = [...new Set(rows.filter((r) => r.questionId === null).map((r) => r.label))];
   return { missing, unlinked };
+}
+
+export type MarkCheck = "match" | "differ" | "unknown";
+
+/**
+ * Do the mark scheme's marks for a part (its rows added up) equal the paper's marks for it?
+ * A quick automatic check that the right rows are linked. Key: partId, or the question id for a
+ * whole-question slot.
+ */
+export function markChecks(
+  questions: QuestionRef[],
+  rows: { questionId: string | null; partId: string | null; marks?: number | null }[],
+): Map<string, { check: MarkCheck; ms: number | null; paper: number }> {
+  const out = new Map<string, { check: MarkCheck; ms: number | null; paper: number }>();
+  const sum = (rs: typeof rows) => (rs.length && rs.every((r) => r.marks != null) ? rs.reduce((s, r) => s + (r.marks ?? 0), 0) : null);
+  for (const q of questions) {
+    const mine = rows.filter((r) => r.questionId === q.id);
+    const slots = q.parts.length && !mine.some((r) => r.partId === null) ? q.parts.map((p) => ({ key: p.id, paper: p.marks ?? 0, rs: mine.filter((r) => r.partId === p.id) })) : [{ key: q.id, paper: q.totalMarks ?? 0, rs: mine }];
+    for (const s of slots) {
+      if (!s.rs.length) continue;
+      const ms = sum(s.rs);
+      out.set(s.key, { check: ms === null ? "unknown" : ms === s.paper ? "match" : "differ", ms, paper: s.paper });
+    }
+  }
+  return out;
 }
 
 /** One line for the admin, or null when everything is linked. */

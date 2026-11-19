@@ -3,7 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { processorFetch } from "@/lib/processor";
 import { deleteObject, getObjectBytes, putPdf } from "@/lib/storage";
-import { coverage, coverageSummary, linkRows, type QuestionRef, type ReaderRow } from "./link";
+import { coverage, coverageSummary, linkRows, markChecks, type QuestionRef, type ReaderRow } from "./link";
 
 export const msFileKey = (paperId: string) => `mark-schemes/${paperId}.pdf`;
 
@@ -20,17 +20,17 @@ async function callReader(pdf: Uint8Array): Promise<ReaderResult> {
 /** The paper's questions and parts, for linking rows. */
 export async function questionRefs(paperId: string): Promise<QuestionRef[]> {
   const qs = await db
-    .select({ id: schema.questions.id, number: schema.questions.number })
+    .select({ id: schema.questions.id, number: schema.questions.number, totalMarks: schema.questions.totalMarks })
     .from(schema.questions)
     .where(eq(schema.questions.paperId, paperId))
     .orderBy(asc(schema.questions.number));
   if (!qs.length) return [];
   const parts = await db
-    .select({ id: schema.questionParts.id, questionId: schema.questionParts.questionId, label: schema.questionParts.label })
+    .select({ id: schema.questionParts.id, questionId: schema.questionParts.questionId, label: schema.questionParts.label, marks: schema.questionParts.marks })
     .from(schema.questionParts)
     .where(inArray(schema.questionParts.questionId, qs.map((q) => q.id)))
     .orderBy(asc(schema.questionParts.sortOrder));
-  return qs.map((q) => ({ ...q, parts: parts.filter((p) => p.questionId === q.id).map(({ id, label }) => ({ id, label })) }));
+  return qs.map((q) => ({ ...q, parts: parts.filter((p) => p.questionId === q.id).map(({ id, label, marks }) => ({ id, label, marks })) }));
 }
 
 /** Save (or replace) a paper's mark scheme file and read it in the background. */
@@ -112,6 +112,7 @@ export async function readMarkScheme(paperId: string) {
           x1: g.x1,
           y1: g.y1,
           sortOrder: i,
+          marks: r.marks ?? null,
         })),
       );
     if (values.length) await tx.insert(schema.msRegions).values(values);
@@ -163,6 +164,7 @@ export type MsRowView = {
   questionId: string | null;
   partId: string | null;
   edited: boolean;
+  marks: number | null;
   regions: { id: string; page: number; x0: number; y0: number; x1: number; y1: number }[];
 };
 
@@ -178,11 +180,14 @@ export async function loadMarkSchemeReview(paperId: string) {
   const rows: MsRowView[] = [];
   for (const r of regions) {
     let row = rows.find((x) => x.label === r.label);
-    if (!row) rows.push((row = { label: r.label, questionId: r.questionId, partId: r.partId, edited: r.editedByAdmin, regions: [] }));
+    if (!row) rows.push((row = { label: r.label, questionId: r.questionId, partId: r.partId, edited: r.editedByAdmin, marks: r.marks, regions: [] }));
     row.regions.push({ id: r.id, page: r.page, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 });
   }
   const c = await markSchemeCoverage(paperId, ms.id);
+  const refs = await questionRefs(paperId);
+  const checks = Object.fromEntries(markChecks(refs, rows));
   return {
+    checks,
     id: ms.id,
     status: ms.status,
     statusReason: ms.statusReason,
@@ -194,3 +199,35 @@ export async function loadMarkSchemeReview(paperId: string) {
   };
 }
 export type MarkSchemeReview = NonNullable<Awaited<ReturnType<typeof loadMarkSchemeReview>>>;
+
+/**
+ * Mark schemes waiting for review and whether each is "ready": every part has a row, no rows are
+ * unmatched, and every part's mark-scheme marks equal the paper's. Optionally for one subject.
+ */
+export async function reviewQueue(subjectId?: string) {
+  const list = await db
+    .select({ id: schema.markSchemes.id, paperId: schema.markSchemes.paperId, code: schema.papers.paperCode, series: schema.papers.series, year: schema.papers.year })
+    .from(schema.markSchemes)
+    .innerJoin(schema.papers, eq(schema.papers.id, schema.markSchemes.paperId))
+    .where(and(eq(schema.markSchemes.status, "needs_review"), subjectId ? eq(schema.papers.subjectId, subjectId) : undefined));
+  // All papers at once (each needs two small queries).
+  return Promise.all(list.map(async (m) => {
+    const [refs, rows] = await Promise.all([
+      questionRefs(m.paperId),
+      db
+        .select({ label: schema.msRegions.label, questionId: schema.msRegions.questionId, partId: schema.msRegions.partId, marks: schema.msRegions.marks })
+        .from(schema.msRegions)
+        .where(eq(schema.msRegions.markSchemeId, m.id)),
+    ]);
+    // One entry per row: a row that runs onto another page is stored as several boxes.
+    const byLabel = [...new Map(rows.map((r) => [r.label, r])).values()];
+    const c = coverage(refs, byLabel);
+    const checks = [...markChecks(refs, byLabel).values()];
+    const differ = checks.filter((x) => x.check === "differ").length;
+    const unknown = checks.filter((x) => x.check === "unknown").length;
+    const reason =
+      coverageSummary(c) ??
+      (differ ? `${differ} part${differ === 1 ? "'s marks differ" : "s' marks differ"} from the paper` : unknown ? `${unknown} part${unknown === 1 ? " has" : "s have"} no marks printed to check` : null);
+    return { id: m.id, paperId: m.paperId, label: `${m.code} ${m.series} ${m.year}`, ready: !reason, reason };
+  }));
+}

@@ -50,6 +50,7 @@ def test_rows_regions_and_page_continuation():
     first = r.rows[0].regions[0]
     assert first.x0 > 95 and first.x1 < 553  # the label column is not in the crop
     assert len(r.rows[2].regions) == 2 and r.rows[2].regions[1].page == 1
+    assert [x.marks for x in r.rows] == [1, 1, 1, 1]  # each row's "(1)" in the Mark column
 
 
 def test_scan_fails_with_reason():

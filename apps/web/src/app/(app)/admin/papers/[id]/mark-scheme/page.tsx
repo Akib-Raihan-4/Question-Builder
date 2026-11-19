@@ -20,6 +20,16 @@ export default async function MarkSchemePage({ params }: { params: Promise<{ id:
         totalMarks: q.totalMarks,
         parts: data.parts.filter((p) => p.questionId === q.id).sort((a, b) => a.sortOrder - b.sortOrder).map((p) => ({ id: p.id, label: p.label, marks: p.marks })),
       }))}
+      // The question paper's boxes per question / part, to show each part beside its mark scheme.
+      paperRegions={Object.fromEntries(
+        [...new Set(data.regions.map((r) => r.ownerId))].map((owner) => [
+          owner,
+          data.regions
+            .filter((r) => r.ownerId === owner)
+            .sort((a, b) => a.page - b.page || a.y0 - b.y0)
+            .map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1 })),
+        ]),
+      )}
       initial={ms}
     />
   );

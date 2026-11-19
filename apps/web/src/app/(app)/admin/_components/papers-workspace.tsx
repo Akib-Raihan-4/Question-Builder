@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { PapersTable, type PaperRow } from "./papers-table";
 import { UploadPanel, type Subject } from "./upload-panel";
 import { Select } from "@/components/ui/select";
+import { MsReviewBanner } from "./ms-review-banner";
 
 /** Past papers, one tab per subject/level (e.g. "Mathematics B · International GCSE", "Physics Unit 3 · International A Level"). */
 export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows: (PaperRow & { subjectId: string })[] }) {
@@ -64,6 +65,9 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
       {adding && <AddSubject onAdded={(id) => { setAdding(false); router.refresh(); select(id); }} />}
 
       {showUpload && <UploadPanel subjects={subjects} defaultSubjectId={current?.id} />}
+      {current && (
+        <MsReviewBanner subjectId={current.id} waiting={rows.filter((r) => r.subjectId === active && r.msStatus === "needs_review").length} />
+      )}
       <PapersTable rows={rows.filter((r) => r.subjectId === active)} subjectName={current ? `${current.name} (${current.qualification})` : ""} />
     </div>
   );

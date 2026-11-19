@@ -298,6 +298,8 @@ export const msRegions = pgTable(
     y1: real("y1").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     editedByAdmin: boolean("edited_by_admin").notNull().default(false),
+    /** The row's total from the mark scheme's Mark column (same on every box of the row), if printed. */
+    marks: integer("marks"),
   },
   (t) => [index("ms_regions_scheme_idx").on(t.markSchemeId), index("ms_regions_question_idx").on(t.questionId)],
 );
