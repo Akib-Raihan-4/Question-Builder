@@ -95,3 +95,14 @@ def test_parts_stacked_in_one_box_are_split():
         p.insert_text((102, 104 + i * 90), f"answer {lab}", fontsize=10)
     r = read_mark_scheme(doc.tobytes())
     assert [x.label for x in r.rows] == ["1(a)", "1(b)", "1(c)"]
+
+
+def test_alternative_after_total_stays_with_its_question():
+    doc = pymupdf.open()
+    _table(doc, [("1", 40), ("Total for question 1", 20), ("Alt", 40), ("2", 40)])
+    r = read_mark_scheme(doc.tobytes())
+    assert [x.label for x in r.rows] == ["1", "2"]  # "Alt" in the label column doesn't start a row
+    one = r.rows[0].regions
+    assert len(one) == 2  # the row, then the alternative under its total line
+    assert one[0].y1 <= one[1].y0  # the total line itself is left out
+    assert r.rows[0].marks == 1  # the alternative's mark doesn't change the row's marks
