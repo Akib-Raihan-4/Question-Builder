@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../src/db";
 import { msFileKey, readMarkScheme } from "../src/lib/mark-schemes/server";
-import { putPdf } from "../src/lib/storage";
+import { deleteObject, putPdf } from "../src/lib/storage";
 
 async function main() {
   const [folder, paperCode] = process.argv.slice(2);
@@ -43,10 +43,13 @@ async function main() {
       continue;
     }
     const bytes = new Uint8Array(readFileSync(join(folder, name)));
-    await putPdf(msFileKey(paper.id), bytes);
-    const values = { fileKey: msFileKey(paper.id), originalFilename: name, fileSize: bytes.length, status: "processing" as const, statusReason: null, publishedAt: null, updatedAt: new Date() };
+    const [old] = await db.select({ fileKey: schema.markSchemes.fileKey }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, paper.id));
+    const fileKey = msFileKey(paper.id);
+    await putPdf(fileKey, bytes);
+    const values = { fileKey, originalFilename: name, fileSize: bytes.length, status: "processing" as const, statusReason: null, publishedAt: null, updatedAt: new Date() };
     const [ms] = await db.insert(schema.markSchemes).values({ paperId: paper.id, ...values }).onConflictDoUpdate({ target: schema.markSchemes.paperId, set: values }).returning({ id: schema.markSchemes.id });
     await db.delete(schema.msRegions).where(eq(schema.msRegions.markSchemeId, ms.id));
+    if (old && old.fileKey !== fileKey) await deleteObject(old.fileKey).catch(() => {});
     const out = await readMarkScheme(paper.id);
     console.log(`✓ ${name}: ${JSON.stringify(out)}`);
   }

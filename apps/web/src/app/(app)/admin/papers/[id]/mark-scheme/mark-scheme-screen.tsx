@@ -227,6 +227,7 @@ export function MarkSchemeScreen({
       {drawFor && ms && (
         <DrawBoxDialog
           paperId={paper.id}
+          version={ms.fileVersion}
           title={drawFor.title}
           rows={rows}
           startPage={startPageFor(drawFor)}
@@ -311,7 +312,7 @@ export function MarkSchemeScreen({
               {unlinked.map((r) => (
                 <div key={r.label} className="rounded-lg border bg-background">
                   <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} />
-                  <MsCrops row={r} paperId={paper.id} />
+                  <MsCrops row={r} paperId={paper.id} version={ms.fileVersion} />
                 </div>
               ))}
             </section>
@@ -365,7 +366,7 @@ export function MarkSchemeScreen({
                             {linked.length ? (
                               linked.map((r) => (
                                 <div key={r.label} className="mb-2 rounded-lg border">
-                                  <MsCrops row={r} paperId={paper.id} />
+                                  <MsCrops row={r} paperId={paper.id} version={ms.fileVersion} />
                                   <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} subtle />
                                 </div>
                               ))
@@ -447,8 +448,8 @@ function Crops({ paperId, boxes, maxH }: { paperId: string; boxes: Box[]; maxH?:
   );
 }
 
-function MsCrops({ row, paperId }: { row: MsRowView; paperId: string }) {
-  return <Crops paperId={msDocKey(paperId)} boxes={row.regions} />;
+function MsCrops({ row, paperId, version }: { row: MsRowView; paperId: string; version?: string }) {
+  return <Crops paperId={msDocKey(paperId, version)} boxes={row.regions} />;
 }
 
 /** Row label, its marks, and the (rarely needed) fixes: link elsewhere or remove. */

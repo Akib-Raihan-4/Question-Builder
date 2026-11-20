@@ -16,6 +16,7 @@ type Box = { page: number; x0: number; y0: number; x1: number; y1: number };
  */
 export function DrawBoxDialog({
   paperId,
+  version,
   title,
   rows,
   startPage,
@@ -23,6 +24,7 @@ export function DrawBoxDialog({
   onSave,
 }: {
   paperId: string;
+  version?: string;
   title: string;
   rows: MsRowView[];
   startPage?: number;
@@ -39,7 +41,7 @@ export function DrawBoxDialog({
 
   useEffect(() => {
     let stop = false;
-    getPdfDoc(msDocKey(paperId))
+    getPdfDoc(msDocKey(paperId, version))
       .then(async (d) => {
         const s = [];
         for (let i = 1; i <= d.numPages; i++) {
@@ -55,7 +57,7 @@ export function DrawBoxDialog({
     return () => {
       stop = true;
     };
-  }, [paperId]);
+  }, [paperId, version]);
 
   useEffect(() => {
     const el = scrollRef.current;

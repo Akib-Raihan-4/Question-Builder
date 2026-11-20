@@ -49,8 +49,14 @@ const renders = limiter(2);
  * A source document: a paper's question paper (its id) or its mark scheme ("ms:<paperId>").
  * Everything below is keyed by this string.
  */
-const fileUrl = (key: string) => (key.startsWith("ms:") ? `/api/papers/${key.slice(3)}/mark-scheme` : `/api/papers/${key}/file`);
-export const msDocKey = (paperId: string) => `ms:${paperId}`;
+const fileUrl = (key: string) => {
+  if (!key.startsWith("ms:")) return `/api/papers/${key}/file`;
+  const [, paperId, version] = key.split(":");
+  // The version makes a replaced mark scheme a different address, so no old copy is shown.
+  return `/api/papers/${paperId}/mark-scheme${version ? `?v=${version}` : ""}`;
+};
+/** A paper's mark scheme, as a given uploaded version. */
+export const msDocKey = (paperId: string, version?: string) => `ms:${paperId}:${version ?? ""}`;
 
 /** Fetch a file, reporting progress 0–1 (null while the size is unknown). */
 async function download(url: string, onProgress: (fraction: number | null) => void): Promise<Uint8Array> {

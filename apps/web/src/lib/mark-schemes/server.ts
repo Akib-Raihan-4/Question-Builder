@@ -5,7 +5,14 @@ import { processorFetch } from "@/lib/processor";
 import { deleteObject, getObjectBytes, putPdf } from "@/lib/storage";
 import { coverage, coverageSummary, linkRows, markChecks, type QuestionRef, type ReaderRow } from "./link";
 
-export const msFileKey = (paperId: string) => `mark-schemes/${paperId}.pdf`;
+/**
+ * Each upload gets its own storage name, so a replaced file can never be served (or cached by a
+ * browser) in place of the new one; the old file is deleted once the new one is saved.
+ */
+export const msFileKey = (paperId: string, version = Date.now()) => `mark-schemes/${paperId}-${version}.pdf`;
+
+/** The version part of a stored file name ("…-1795084393376.pdf" → "1795084393376"); older files have none. */
+export const msFileVersion = (fileKey: string) => fileKey.match(/-(\d+)\.pdf$/)?.[1] ?? "1";
 
 type ReaderResult = { reader_version: string; status: "ok" | "failed"; reason: string | null; page_count: number; rows: ReaderRow[]; warnings: string[] };
 
@@ -35,6 +42,7 @@ export async function questionRefs(paperId: string): Promise<QuestionRef[]> {
 
 /** Save (or replace) a paper's mark scheme file and read it in the background. */
 export async function saveMarkScheme(paperId: string, bytes: Uint8Array, filename: string | null, userId: string) {
+  const [old] = await db.select({ fileKey: schema.markSchemes.fileKey }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, paperId));
   const key = msFileKey(paperId);
   await putPdf(key, bytes);
   const values = {
@@ -54,6 +62,7 @@ export async function saveMarkScheme(paperId: string, bytes: Uint8Array, filenam
     .returning({ id: schema.markSchemes.id });
   // A new file means new rows: drop the old ones, even hand-edited ones.
   await db.delete(schema.msRegions).where(eq(schema.msRegions.markSchemeId, ms.id));
+  if (old && old.fileKey !== key) await deleteObject(old.fileKey).catch((e) => console.error("[storage] delete old mark scheme failed", e));
   scheduleReadMarkScheme(paperId);
   return ms.id;
 }
@@ -192,6 +201,7 @@ export async function loadMarkSchemeReview(paperId: string) {
     status: ms.status,
     statusReason: ms.statusReason,
     originalFilename: ms.originalFilename,
+    fileVersion: msFileVersion(ms.fileKey),
     pageCount: ms.pageCount,
     updatedAt: ms.updatedAt.toISOString(),
     rows,
