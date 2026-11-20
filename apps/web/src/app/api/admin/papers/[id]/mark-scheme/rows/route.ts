@@ -60,6 +60,51 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   return NextResponse.json({ ok: true, summary: await refreshMarkSchemeStatus(paperId) });
 }
 
+const Adjusted = z.object({
+  label: z.string().min(1).max(40),
+  boxes: z
+    .array(z.object({ page: z.number().int().min(0).max(500), x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() }))
+    .min(1)
+    .max(10),
+});
+
+/** Move or resize a row's boxes (its link and marks stay). Marked edited so a re-read keeps them. */
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const u = await apiUser("admin");
+  if (!u.ok) return u.response;
+  const paperId = (await params).id;
+  const parsed = Adjusted.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid box" }, { status: 400 });
+  const ms = await scheme(paperId);
+  if (!ms) return NextResponse.json({ error: "No mark scheme" }, { status: 404 });
+  const { label, boxes } = parsed.data;
+  const where = and(eq(schema.msRegions.markSchemeId, ms.id), eq(schema.msRegions.label, label));
+  const [row] = await db.select().from(schema.msRegions).where(where).limit(1);
+  if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.msRegions).where(where);
+    await tx.insert(schema.msRegions).values(
+      [...boxes]
+        .sort((a, b) => a.page - b.page || a.y0 - b.y0)
+        .map((b, i) => ({
+          markSchemeId: ms.id,
+          questionId: row.questionId,
+          partId: row.partId,
+          label,
+          marks: row.marks,
+          page: b.page,
+          x0: Math.min(b.x0, b.x1),
+          y0: Math.min(b.y0, b.y1),
+          x1: Math.max(b.x0, b.x1),
+          y1: Math.max(b.y0, b.y1),
+          sortOrder: i,
+          editedByAdmin: true,
+        })),
+    );
+  });
+  return NextResponse.json({ ok: true, summary: await refreshMarkSchemeStatus(paperId) });
+}
+
 const Drawn = z.object({
   questionId: z.string().uuid(),
   partId: z.string().uuid().nullable(),

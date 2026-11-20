@@ -169,8 +169,8 @@ function EditDialog({ target, q, onClose, onSave }: { target: Target; q: BankQue
       heading={`Your boxes for ${target.label}${target.doc === "ms" ? " — mark scheme" : ""} · ${q.paperLabel}`}
       help={
         <>
-          The boxes used now are in orange. Remove one with its ×, drag on the page to draw a new one (one per page if it runs over). Only
-          your papers use these.
+          The boxes used now are in orange. Click one to move it or drag its handles to resize it; remove one with its ×; drag on an empty
+          part of the page to draw a new one. Only your papers use these.
         </>
       }
       boxLabel={target.label}

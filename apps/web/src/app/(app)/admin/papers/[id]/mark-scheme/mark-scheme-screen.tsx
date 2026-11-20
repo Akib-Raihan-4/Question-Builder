@@ -65,6 +65,7 @@ export function MarkSchemeScreen({
   const [sending, setSending] = useState<{ name: string; fraction: number } | null>(null);
   const [filter, setFilter] = useState<"all" | "look">("all");
   const [drawFor, setDrawFor] = useState<Slot | null>(null);
+  const [adjust, setAdjust] = useState<MsRowView | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const base = `/api/admin/papers/${paper.id}/mark-scheme`;
@@ -242,6 +243,25 @@ export function MarkSchemeScreen({
           }}
         />
       )}
+      {adjust && ms && (
+        <DrawBoxDialog
+          paperId={paper.id}
+          version={ms.fileVersion}
+          title={adjust.label}
+          rows={rows.filter((r) => r.label !== adjust.label)}
+          startPage={adjust.regions[0]?.page}
+          initialBoxes={adjust.regions.map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1 }))}
+          onClose={() => setAdjust(null)}
+          onSave={async (boxes) => {
+            const row = adjust;
+            setAdjust(null);
+            await run(
+              () => call(`${base}/rows`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: row.label, boxes }) }),
+              `Row ${row.label} adjusted`,
+            );
+          }}
+        />
+      )}
       {!ms ? (
         <EmptyState title="No mark scheme yet" action={<Button onClick={() => fileRef.current?.click()}>Upload mark scheme</Button>}>
           Upload this paper&apos;s mark scheme PDF. Its rows are found and matched to the questions automatically.
@@ -311,7 +331,7 @@ export function MarkSchemeScreen({
               <h2 className="text-sm font-medium text-red-900">Rows not matched to a question — link or remove them</h2>
               {unlinked.map((r) => (
                 <div key={r.label} className="rounded-lg border bg-background">
-                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} />
+                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} onAdjust={() => setAdjust(r)} />
                   <MsCrops row={r} paperId={paper.id} version={ms.fileVersion} />
                 </div>
               ))}
@@ -367,7 +387,7 @@ export function MarkSchemeScreen({
                               linked.map((r) => (
                                 <div key={r.label} className="mb-2 rounded-lg border">
                                   <MsCrops row={r} paperId={paper.id} version={ms.fileVersion} />
-                                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} subtle />
+                                  <RowTools row={r} questions={questions} busy={busy} onChange={run} base={base} onAdjust={() => setAdjust(r)} subtle />
                                 </div>
                               ))
                             ) : (
@@ -460,8 +480,11 @@ function RowTools({
   onChange,
   base,
   subtle,
+  onAdjust,
 }: {
   row: MsRowView;
+  /** Move or resize the row's boxes. */
+  onAdjust?: () => void;
   questions: Q[];
   busy: boolean;
   onChange: (fn: () => Promise<unknown>, ok?: string) => Promise<void>;
@@ -485,8 +508,19 @@ function RowTools({
         {row.regions.length > 1 && ` · ${row.regions.length} pieces`}
         {row.edited && " · linked by hand"}
       </span>
+      {onAdjust && (
+        <button
+          type="button"
+          disabled={busy}
+          className="ml-auto rounded px-1.5 py-1 hover:bg-muted hover:text-foreground"
+          onClick={onAdjust}
+          title="Move or resize this row's boxes on the mark scheme"
+        >
+          Adjust boxes
+        </button>
+      )}
       {fixing ? (
-        <div className="ml-auto flex items-center gap-1">
+        <div className={cn("flex items-center gap-1", !onAdjust && "ml-auto")}>
           <Select
             aria-label={`Link row ${row.label} to`}
             value={value}
@@ -513,7 +547,7 @@ function RowTools({
           </button>
         </div>
       ) : (
-        <button type="button" className="ml-auto rounded px-1.5 py-1 hover:bg-muted hover:text-foreground" onClick={() => setFixing(true)}>
+        <button type="button" className={cn("rounded px-1.5 py-1 hover:bg-muted hover:text-foreground", !onAdjust && "ml-auto")} onClick={() => setFixing(true)}>
           Wrong row?
         </button>
       )}

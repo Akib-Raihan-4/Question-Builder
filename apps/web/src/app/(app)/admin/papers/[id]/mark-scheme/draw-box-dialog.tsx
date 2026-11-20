@@ -14,6 +14,7 @@ export function DrawBoxDialog({
   title,
   rows,
   startPage,
+  initialBoxes,
   onClose,
   onSave,
 }: {
@@ -22,17 +23,24 @@ export function DrawBoxDialog({
   title: string;
   rows: MsRowView[];
   startPage?: number;
+  /** Adjusting a row: its boxes now (otherwise a new box is drawn). */
+  initialBoxes?: DrawnBox[];
   onClose: () => void;
   onSave: (boxes: DrawnBox[]) => void;
 }) {
   return (
     <DrawBoxesDialog
       docKey={msDocKey(paperId, version)}
-      heading={`Draw the mark scheme for ${title}`}
-      help="Drag on the page round this part's row (answer, guidance and marks). Runs onto another page? Draw a second box there."
+      heading={initialBoxes ? `Adjust the boxes of row ${title}` : `Draw the mark scheme for ${title}`}
+      help={
+        initialBoxes
+          ? "Click a box to move it or drag its handles to resize it. Remove one with its ×, or drag on the page to add another."
+          : "Drag on the page round this part's row (answer, guidance and marks). Runs onto another page? Draw a second box there. Click a box to move or resize it."
+      }
       boxLabel={title}
       outlines={rows.flatMap((r) => r.regions.map((g) => ({ ...g, label: r.label, dashed: !r.questionId })))}
       startPage={startPage}
+      initialBoxes={initialBoxes}
       saveLabel="Save"
       onClose={onClose}
       onSave={onSave}
