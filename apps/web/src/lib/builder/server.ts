@@ -4,6 +4,7 @@ import type { PaperHeader } from "@/db/schema";
 import type { Role } from "@/lib/auth";
 import type { BankQuestion, Item } from "./model";
 import { removableGaps } from "./answer-space";
+import { ownBoxes } from "./own-boxes";
 
 export const paperLabel = (p: { paperCode: string; series: string; year: number }) =>
   `${p.paperCode} ${p.series} ${p.year}`;
@@ -28,8 +29,11 @@ export async function listSourcePapers() {
     .orderBy(asc(schema.subjects.specCode), desc(schema.papers.year), asc(schema.papers.series), asc(schema.papers.paperCode));
 }
 
-/** Questions with parts and boxes, shaped for the builder. */
-export async function loadBankQuestions(where: { paperId?: string; questionIds?: string[] }): Promise<BankQuestion[]> {
+/**
+ * Questions with parts and boxes, shaped for the builder. With a user id, that teacher's own
+ * boxes (if they drew any) replace the shared ones — for them only.
+ */
+export async function loadBankQuestions(where: { paperId?: string; questionIds?: string[] }, userId?: string): Promise<BankQuestion[]> {
   const cond = where.paperId
     ? eq(schema.questions.paperId, where.paperId)
     : where.questionIds?.length
@@ -76,11 +80,11 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
         .where(and(inArray(schema.msRegions.questionId, qIds), eq(schema.markSchemes.status, "published")))
     ).map((r) => r.id),
   );
+  const own = await ownBoxes(userId, "paper", [...qIds, ...parts.map((p) => p.id)]);
   const paperOf = new Map<string, string>(qs.map((x) => [x.q.id, x.p.id]));
   for (const pt of parts) paperOf.set(pt.id, paperOf.get(pt.questionId)!);
   const reg = (ownerId: string) =>
-    regions
-      .filter((r) => r.ownerId === ownerId)
+    (own.get(ownerId) ?? regions.filter((r) => r.ownerId === ownerId))
       .map(({ page, x0, y0, x1, y1 }) => {
         const region = { page, x0, y0, x1, y1 };
         const gaps = removableGaps(region, layouts.get(paperOf.get(ownerId)!)?.pages[page]);
@@ -94,19 +98,20 @@ export async function loadBankQuestions(where: { paperId?: string; questionIds?:
     totalMarks: q.totalMarks,
     hasMarkScheme: withMs.has(q.id),
     regions: reg(q.id),
+    ownBoxes: own.has(q.id) || undefined,
     parts: parts
       .filter((pt) => pt.questionId === q.id)
-      .map((pt) => ({ id: pt.id, label: pt.label, marks: pt.marks, sortOrder: pt.sortOrder, regions: reg(pt.id) })),
+      .map((pt) => ({ id: pt.id, label: pt.label, marks: pt.marks, sortOrder: pt.sortOrder, regions: reg(pt.id), ownBoxes: own.has(pt.id) || undefined })),
   }));
 }
 
 /** A source paper for the browse pane; teachers only get published papers. */
-export async function loadSourcePaper(paperId: string, role: Role) {
+export async function loadSourcePaper(paperId: string, role: Role, userId?: string) {
   const [p] = await db.select().from(schema.papers).where(eq(schema.papers.id, paperId));
   if (!p || (p.status !== "published" && role !== "admin")) return null;
   return {
     paper: { id: p.id, label: paperLabel(p), pageCount: p.pageCount },
-    questions: await loadBankQuestions({ paperId }),
+    questions: await loadBankQuestions({ paperId }, userId),
   };
 }
 
@@ -122,6 +127,6 @@ export async function getBuiltPaper(id: string, ownerId: string) {
     .where(eq(schema.builtPaperItems.builtPaperId, id))
     .orderBy(asc(schema.builtPaperItems.position));
   const items: Item[] = rows.map((r) => ({ questionId: r.questionId, partIds: r.partIds, answerSpace: r.answerSpace }));
-  const bank = await loadBankQuestions({ questionIds: items.map((i) => i.questionId) });
+  const bank = await loadBankQuestions({ questionIds: items.map((i) => i.questionId) }, ownerId);
   return { id: bp.id, title: bp.title, header: bp.headerJson as PaperHeader, items, bank, updatedAt: bp.updatedAt };
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
@@ -8,7 +8,8 @@ import { buildPaperPdf } from "@/lib/export/build-pdf";
 import { buildPaperDocx } from "@/lib/export/build-docx";
 import { getObjectBytes, putFile, signedDownloadUrl } from "@/lib/storage";
 import { brandingForExport } from "@/lib/branding";
-import { buildMarkSchemePdf, type MsRowInput } from "@/lib/export/build-ms-pdf";
+import { buildMarkSchemePdf } from "@/lib/export/build-ms-pdf";
+import { loadBuilderMarkScheme } from "@/lib/mark-schemes/for-builder";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -71,41 +72,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const wantMs = url.searchParams.get("format") === "ms" || withMs;
   let markScheme: { pdf: Uint8Array; missing: number[] } | null = null;
   if (wantMs) {
-    const regs = await db
-      .select({
-        questionId: schema.msRegions.questionId,
-        partId: schema.msRegions.partId,
-        label: schema.msRegions.label,
-        page: schema.msRegions.page,
-        x0: schema.msRegions.x0,
-        y0: schema.msRegions.y0,
-        x1: schema.msRegions.x1,
-        y1: schema.msRegions.y1,
-        paperId: schema.markSchemes.paperId,
-        fileKey: schema.markSchemes.fileKey,
-      })
-      .from(schema.msRegions)
-      .innerJoin(schema.markSchemes, eq(schema.markSchemes.id, schema.msRegions.markSchemeId))
-      .where(and(inArray(schema.msRegions.questionId, items.map((i) => i.questionId)), eq(schema.markSchemes.status, "published")))
-      .orderBy(asc(schema.msRegions.page), asc(schema.msRegions.y0), asc(schema.msRegions.sortOrder));
-    const rows = new Map<string, MsRowInput[]>();
-    const msKey = new Map<string, string>();
-    for (const r of regs) {
-      msKey.set(r.paperId, r.fileKey);
-      const list = rows.get(r.questionId!) ?? [];
-      let row = list.find((x) => x.label === r.label);
-      if (!row) list.push((row = { label: r.label, partId: r.partId, regions: [] }));
-      row.regions.push({ page: r.page, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 });
-      rows.set(r.questionId!, list);
-    }
-    if (!regs.length) return NextResponse.json({ error: "None of these questions has a published mark scheme yet" }, { status: 400 });
+    // As this teacher sees it: their own mark scheme boxes replace the shared ones.
+    const { rows, files } = await loadBuilderMarkScheme(items.map((i) => i.questionId), u.userId);
+    if (!rows.size) return NextResponse.json({ error: "None of these questions has a published mark scheme yet" }, { status: 400 });
     markScheme = await buildMarkSchemePdf({
       title: bp.title,
       header: bp.header,
       items,
       bank,
       rows,
-      loadMarkScheme: (paperId) => getObjectBytes(msKey.get(paperId)!),
+      loadMarkScheme: (paperId) => getObjectBytes(files.get(paperId)!.fileKey),
     });
   }
   if (markScheme && !withMs) {

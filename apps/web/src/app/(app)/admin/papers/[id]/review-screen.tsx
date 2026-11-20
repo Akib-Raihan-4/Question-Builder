@@ -15,6 +15,13 @@ import { BoxOverlay, type Owner } from "./box-overlay";
 import { QuestionPanel } from "./question-panel";
 import { DetailsForm } from "./details-form";
 import { confirmDialog, toast } from "@/components/feedback";
+import { useUndoShortcut } from "@/components/use-undo-shortcut";
+
+/** One box change that Undo can reverse. */
+type BoxStep =
+  | { kind: "move"; regionId: string; before: PdfRect & { editedByAdmin: boolean } }
+  | { kind: "add"; regionId: string }
+  | { kind: "delete"; region: ReviewRegion };
 
 const STATUS_CLS: Record<string, string> = {
   needs_review: "bg-amber-100 text-amber-800",
@@ -56,6 +63,8 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const [viewerWidth, setViewerWidth] = useState(760);
   const [pageSizes, setPageSizes] = useState<{ w: number; h: number }[]>([]);
+  const [history, setHistory] = useState<BoxStep[]>([]);
+  const remember = (step: BoxStep) => setHistory((h) => [...h.slice(-49), step]);
 
   const paperId = data.paper.id;
   const flash = (ok: boolean, text: string) => toast(text, ok ? "ok" : "error");
@@ -108,9 +117,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === "Delete" || e.key === "Backspace") && regionId && !(e.target instanceof HTMLInputElement)) {
         e.preventDefault();
-        const id = regionId;
-        setRegionId(null);
-        run(() => api(`/api/admin/regions/${id}`, "DELETE"), "Box deleted");
+        deleteSelectedBox();
       }
       if (e.key === "Escape") {
         setRegionId(null);
@@ -119,6 +126,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteSelectedBox reads the current selection
   }, [regionId, run]);
 
   const labels = useMemo(() => {
@@ -145,9 +153,34 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
   function deleteSelectedBox() {
     if (!regionId) return;
     const id = regionId;
+    const region = data.regions.find((r) => r.id === id);
     setRegionId(null);
-    run(() => api(`/api/admin/regions/${id}`, "DELETE"), "Box deleted");
+    run(async () => {
+      await api(`/api/admin/regions/${id}`, "DELETE");
+      if (region) remember({ kind: "delete", region });
+    }, "Box deleted");
   }
+
+  /** Reverse the last box change (button, or Ctrl+Z / ⌘Z). */
+  function undo() {
+    const step = history.at(-1);
+    if (!step || busy) return;
+    setHistory((h) => h.slice(0, -1));
+    setRegionId(null);
+    run(async () => {
+      if (step.kind === "move") {
+        await api(`/api/admin/regions/${step.regionId}`, "PATCH", step.before);
+      } else if (step.kind === "add") {
+        await api(`/api/admin/regions/${step.regionId}`, "DELETE");
+      } else {
+        const { ownerType, ownerId, page, x0, y0, x1, y1 } = step.region;
+        const back: ReviewRegion = await api(`/api/admin/regions`, "POST", { ownerType, ownerId, page, x0, y0, x1, y1 });
+        // Earlier steps about the deleted box now mean the restored one.
+        setHistory((h) => h.map((s) => (s.kind !== "delete" && s.regionId === step.region.id ? { ...s, regionId: back.id } : s)));
+      }
+    }, step.kind === "move" ? "Box moved back" : step.kind === "add" ? "New box removed" : "Box restored");
+  }
+  useUndoShortcut(undo);
 
   function goToPage(i: number) {
     const viewer = viewerRef.current;
@@ -159,7 +192,9 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
     setData((d) => ({ ...d, regions: d.regions.map((r) => (r.id === region.id ? { ...region, editedByAdmin: true } : r)) }));
   }
 
-  async function commitRegion(region: ReviewRegion) {
+  async function commitRegion(region: ReviewRegion, before: ReviewRegion) {
+    const { x0, y0, x1, y1, editedByAdmin } = before;
+    remember({ kind: "move", regionId: region.id, before: { x0, y0, x1, y1, editedByAdmin } });
     try {
       await api(`/api/admin/regions/${region.id}`, "PATCH", { x0: region.x0, y0: region.y0, x1: region.x1, y1: region.y1 });
     } catch (e) {
@@ -170,10 +205,10 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
 
   function drawRegion(page: number, rect: PdfRect) {
     if (!owner) return;
-    run(
-      () => api(`/api/admin/regions`, "POST", { ownerType: owner.type, ownerId: owner.id, page, ...rect }),
-      `Box added to ${labels[owner.id]}`,
-    ).then(() => setDrawMode(false));
+    run(async () => {
+      const row: ReviewRegion = await api(`/api/admin/regions`, "POST", { ownerType: owner.type, ownerId: owner.id, page, ...rect });
+      remember({ kind: "add", regionId: row.id });
+    }, `Box added to ${labels[owner.id]}`).then(() => setDrawMode(false));
   }
 
   function scrollToOwner(ownerId: string) {
@@ -349,6 +384,15 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             <Button size="sm" variant="outline" disabled={!regionId || busy} onClick={deleteSelectedBox} className="text-destructive">
               Delete box
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!history.length || busy}
+              onClick={undo}
+              title="Undo the last box change (Ctrl+Z, or ⌘Z on a Mac)"
+            >
+              ↶ Undo
+            </Button>
             <div className="ml-auto flex items-center gap-1">
               <Button size="sm" variant="ghost" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}>
                 −
@@ -368,7 +412,8 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             <span className="mt-1 block md:hidden">Easiest on a tablet or computer.</span>
             Tap or click a box to select it, then drag to move it or drag its handles to resize. To add a box, select a question or part and press{" "}
             <span className="font-medium text-foreground">Draw box</span> (or hold <kbd className="rounded border px-1">Shift</kbd>) and drag on the page.
-            Boxes marked ✎ were edited by hand and are kept when the parser re-runs.
+            Boxes marked ✎ were edited by hand and are kept when the parser re-runs. Made a mistake? Press{" "}
+            <span className="font-medium text-foreground">Undo</span> (or <kbd className="rounded border px-1">Ctrl</kbd>+<kbd className="rounded border px-1">Z</kbd>).
           </details>
           {error && <p className="text-sm text-destructive">Could not load the PDF: {error}</p>}
           {!doc && !error && (

@@ -8,5 +8,5 @@ export async function GET(req: Request) {
   const raw = Object.fromEntries([...new URL(req.url).searchParams].filter(([, v]) => v !== ""));
   const parsed = SearchParams.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "Invalid search" }, { status: 400 });
-  return NextResponse.json(await searchQuestions(parsed.data));
+  return NextResponse.json(await searchQuestions(parsed.data, u.userId));
 }

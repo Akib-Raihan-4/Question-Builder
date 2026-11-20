@@ -9,7 +9,7 @@ export type Owner = { type: "question" | "part"; id: string };
 
 type Edge = { l?: boolean; r?: boolean; t?: boolean; b?: boolean };
 type Drag =
-  | { kind: "move" | "resize"; regionId: string; edge: Edge; startX: number; startY: number; orig: PdfRect; moved: boolean }
+  | { kind: "move" | "resize"; regionId: string; edge: Edge; startX: number; startY: number; orig: ReviewRegion; moved: boolean }
   | { kind: "draw"; startX: number; startY: number; rect: PdfRect };
 
 const HANDLES: { edge: Edge; cls: string; cursor: string }[] = [
@@ -54,7 +54,8 @@ export function BoxOverlay({
   selectedRegionId: string | null;
   onSelect: (owner: Owner, regionId: string | null) => void;
   onChange: (region: ReviewRegion) => void;
-  onCommit: (region: ReviewRegion) => void;
+  /** A move or resize finished: the box now, and as it was before (for undo). */
+  onCommit: (region: ReviewRegion, before: ReviewRegion) => void;
   onDraw: (page: number, rect: PdfRect) => void;
   /** "Draw box" is on: dragging anywhere draws (no Shift needed — works with touch and pens). */
   drawMode?: boolean;
@@ -128,7 +129,7 @@ export function BoxOverlay({
       if (r.x1 - r.x0 > 8 && r.y1 - r.y0 > 8) onDraw(page, r);
     } else if (drag.moved) {
       const region = regions.find((r) => r.id === drag.regionId);
-      if (region) onCommit(region);
+      if (region) onCommit(region, drag.orig);
     }
     setDrag(null);
   }

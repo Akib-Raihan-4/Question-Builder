@@ -4,7 +4,12 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { apiUser } from "@/lib/api-auth";
 
-const Patch = z.object({ page: z.number().int().min(0).optional(), x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() });
+const Patch = z.object({
+  page: z.number().int().min(0).optional(),
+  x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number(),
+  /** Undo puts back the box's old "edited by hand" flag; otherwise a move marks it edited. */
+  editedByAdmin: z.boolean().optional(),
+});
 
 /** Admin moved or resized a box. The edited flag makes parser re-runs keep it. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +26,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .set({
       ...(b.page !== undefined ? { page: b.page } : {}),
       x0: Math.min(b.x0, b.x1), x1: Math.max(b.x0, b.x1), y0: Math.min(b.y0, b.y1), y1: Math.max(b.y0, b.y1),
-      editedByAdmin: true,
+      editedByAdmin: b.editedByAdmin ?? true,
     })
     .where(eq(schema.regions.id, (await params).id))
     .returning();

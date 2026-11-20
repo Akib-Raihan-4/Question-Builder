@@ -28,7 +28,7 @@ export type SearchParams = z.infer<typeof SearchParams>;
 export type SearchHit = BankQuestion & { uses: number; snippet: string };
 
 /** Questions from PUBLISHED papers only, with how often teachers have used each. */
-export async function searchQuestions(p: SearchParams): Promise<{ total: number; hits: SearchHit[] }> {
+export async function searchQuestions(p: SearchParams, userId?: string): Promise<{ total: number; hits: SearchHit[] }> {
   const conds: SQL[] = [eq(schema.papers.status, "published")];
   if (p.subjectId) conds.push(eq(schema.papers.subjectId, p.subjectId));
   if (p.paperId) conds.push(eq(schema.papers.id, p.paperId));
@@ -61,7 +61,7 @@ export async function searchQuestions(p: SearchParams): Promise<{ total: number;
     .offset(p.offset);
   if (!rows.length) return { total: 0, hits: [] };
 
-  const bank = new Map((await loadBankQuestions({ questionIds: rows.map((r) => r.id) })).map((q) => [q.id, q]));
+  const bank = new Map((await loadBankQuestions({ questionIds: rows.map((r) => r.id) }, userId)).map((q) => [q.id, q]));
   return {
     total: rows[0].total,
     hits: rows

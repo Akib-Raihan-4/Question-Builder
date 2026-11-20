@@ -9,7 +9,8 @@ import { answerSpaceBlocks, type Block, type Gap } from "./answer-space";
 /** gaps: stretches that "remove answer space" may cut out (from the paper's layout). */
 export type Region = PdfRect & { page: number; gaps?: Gap[] };
 
-export type BankPart = { id: string; label: string; marks: number; sortOrder: number; regions: Region[] };
+/** ownBoxes: the teacher drew their own boxes for it (used instead of the shared ones, for them only). */
+export type BankPart = { id: string; label: string; marks: number; sortOrder: number; regions: Region[]; ownBoxes?: boolean };
 
 export type BankQuestion = {
   id: string;
@@ -18,6 +19,8 @@ export type BankQuestion = {
   number: number; // number on the ORIGINAL paper
   totalMarks: number;
   regions: Region[];
+  /** The teacher drew their own boxes for the whole question. */
+  ownBoxes?: boolean;
   parts: BankPart[];
   /** A published mark scheme has rows for this question (teachers can export it). */
   hasMarkScheme?: boolean;

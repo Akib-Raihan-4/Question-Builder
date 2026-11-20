@@ -8,6 +8,8 @@ import { CropCanvas } from "@/components/pdf/crop-canvas";
 import { chosenParts, dependencyWarnings, itemBlocks, itemMarks, itemRegions, totalMarks, type Item } from "@/lib/builder/model";
 import { LINE_PITCH, LINES_BOTTOM } from "@/lib/builder/answer-space";
 import { AnswerSpaceMenu } from "./answer-space-menu";
+import { MarkSchemePreview } from "./mark-scheme-preview";
+import { OwnBoxesMenu } from "./own-boxes-menu";
 import { useBuilder } from "@/lib/builder/store";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -21,7 +23,8 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
   const bank = useBuilder((s) => s.bank);
   const header = useBuilder((s) => s.header);
   const title = useBuilder((s) => s.title);
-  const { setTitle, setHeader, move } = useBuilder.getState();
+  const { setTitle, setHeader, move, setShowAllMs } = useBuilder.getState();
+  const showAllMs = useBuilder((s) => s.showAllMs);
   const [showHeader, setShowHeader] = useState(false);
   const [view, setView] = useState<"preview" | "outline">("preview");
   const [jumpTo, setJumpTo] = useState<string | null>(null);
@@ -116,6 +119,16 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
               </button>
             ))}
           </div>
+          {items.some((i) => bank[i.questionId]?.hasMarkScheme) && (
+            <button
+              onClick={() => setShowAllMs(!showAllMs)}
+              aria-pressed={showAllMs}
+              className={cn("rounded-md border px-2 py-1 text-xs", showAllMs ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "hover:bg-muted")}
+              title="Show each question's mark scheme under it"
+            >
+              {showAllMs ? "Hide mark schemes" : "Show mark schemes"}
+            </button>
+          )}
           <button onClick={() => setShowHeader((s) => !s)} className="rounded-md border px-2 py-1 text-xs hover:bg-muted">
             {showHeader ? "Hide header" : "Edit header"}
           </button>
@@ -222,6 +235,8 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
   const bank = useBuilder((s) => s.bank);
   const { removeItem } = useBuilder.getState();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.questionId });
+  const showAllMs = useBuilder((s) => s.showAllMs);
+  const [msOpen, setMsOpen] = useState<boolean | null>(null); // null: follow "Show mark schemes"
   const q = bank[item.questionId];
   if (!q) return null;
   const number = index + 1; // never stored
@@ -230,6 +245,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
   const warnings = dependencyWarnings(item, bank);
   const blocks = itemBlocks(item, bank);
   const numberColW = 36;
+  const showMs = Boolean(q.hasMarkScheme) && (msOpen ?? showAllMs);
 
   return (
     <div
@@ -242,12 +258,22 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
         <span className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
           {q.paperLabel} · Q{q.number}
           {parts.length ? parts.map((p) => `(${p.label})`).join("") : ""}
-          {q.hasMarkScheme && (
-            <span className="ml-1.5 rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-700" title="Has a mark scheme">
-              MS
-            </span>
-          )}
         </span>
+        {q.hasMarkScheme && (
+          <button
+            type="button"
+            onClick={() => setMsOpen(!showMs)}
+            aria-pressed={showMs}
+            className={cn(
+              "rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
+              showMs ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+            )}
+            title={showMs ? "Hide the mark scheme" : "Show the mark scheme under this question"}
+          >
+            {showMs ? "Hide MS" : "MS"}
+          </button>
+        )}
+        <OwnBoxesMenu item={item} q={q} />
         <AnswerSpaceMenu item={item} number={number} />
         <MoveControls index={index} count={count} />
         <button
@@ -294,6 +320,11 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
       <div className="pr-6 text-right text-[13px] font-bold" style={{ fontFamily: "Times New Roman, serif" }}>
         (Total for Question {number} is {marks} mark{marks === 1 ? "" : "s"})
       </div>
+      {showMs && (
+        <div className="mt-2 pr-6" style={{ paddingLeft: numberColW }}>
+          <MarkSchemePreview item={item} number={number} paperId={q.paperId} width={A4_W * scale - numberColW - 24} />
+        </div>
+      )}
     </div>
   );
 }

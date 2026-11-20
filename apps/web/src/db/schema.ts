@@ -305,6 +305,36 @@ export const msRegions = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* A teacher's own boxes                                               */
+/* ------------------------------------------------------------------ */
+
+/** Which PDF a teacher's own boxes are on: the past paper, or its mark scheme. */
+export const boxDoc = pgEnum("box_doc", ["paper", "ms"]);
+
+export type OwnBox = { page: number; x0: number; y0: number; x1: number; y1: number };
+
+/**
+ * A teacher's own boxes for one question or part, used instead of the shared ones in their
+ * preview and exports only (other teachers and the admin's boxes are untouched).
+ * Same coordinates as `regions` / `ms_regions`.
+ */
+export const userBoxes = pgTable(
+  "user_boxes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    doc: boxDoc("doc").notNull(),
+    ownerType: regionOwner("owner_type").notNull(),
+    ownerId: uuid("owner_id").notNull(),
+    boxes: jsonb("boxes").$type<OwnBox[]>().notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("user_boxes_owner_idx").on(t.userId, t.doc, t.ownerType, t.ownerId)],
+);
+
+/* ------------------------------------------------------------------ */
 /* A teacher's school branding (logo, watermark), used on their papers  */
 /* ------------------------------------------------------------------ */
 
