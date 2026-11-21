@@ -156,3 +156,19 @@
     background-color: color-mix(in oklch, var(--foreground) 40%, transparent);
   }
 }
+
+/* LoadingCard: a bar that sweeps across while the size of a download isn't known yet. */
+@keyframes loading-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* Content that has just arrived fades in instead of popping. */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in { animation: fade-in 180ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in { animation: none; }
+}

@@ -196,7 +196,13 @@ export function MarkSchemeScreen({
                 className="text-destructive"
                 disabled={busy}
                 onClick={async () =>
-                  (await confirmDialog({ title: "Delete this mark scheme?", body: "Its file and rows are removed. The question paper stays.", confirmLabel: "Delete", danger: true })) &&
+                  (await confirmDialog({
+                    title: "Delete this mark scheme?",
+                    body: "This can't be undone. The question paper and its questions stay.",
+                    details: ["The mark scheme PDF", `All ${ms.rows.length} rows and their boxes, including ones you linked or drew by hand`, "Teachers can no longer export it"],
+                    confirmLabel: "Delete mark scheme",
+                    danger: true,
+                  })) &&
                   run(() => call(base, { method: "DELETE" }), "Mark scheme deleted")
                 }
               >

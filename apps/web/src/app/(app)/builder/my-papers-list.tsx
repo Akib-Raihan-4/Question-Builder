@@ -119,7 +119,7 @@ function PaperRow({ paper: p }: { paper: Paper }) {
           Open
         </Link>
         <DuplicatePaperButton id={p.id} />
-        <DeletePaperButton id={p.id} title={title} />
+        <DeletePaperButton id={p.id} title={title} questions={p.items} />
       </div>
     </li>
   );

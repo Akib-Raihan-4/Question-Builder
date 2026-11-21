@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { toast } from "@/components/feedback";
+import { confirmDialog, toast } from "@/components/feedback";
+import { Spinner } from "@/components/ui/spinner";
 import { logoUrl, setBranding, type ClientBranding } from "@/components/use-branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,10 @@ export function BrandingForm({ initial }: { initial: ClientBranding }) {
   const [wm, setWm] = useState<Watermark>(initial.watermark);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  // Name and watermark are saved with the button; the logo saves as soon as it's chosen.
+  const [saved, setSaved] = useState({ school: initial.school, wm: initial.watermark });
+  const dirty = school !== saved.school || JSON.stringify(wm) !== JSON.stringify(saved.wm);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const apply = (next: ClientBranding) => {
@@ -33,45 +38,73 @@ export function BrandingForm({ initial }: { initial: ClientBranding }) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const res = await fetch("/api/account/branding", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ school, watermark: wm }),
-    });
-    setSaving(false);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return toast(body.error ?? "Could not save", "error");
-    apply(body);
-    toast("Branding saved");
+    try {
+      const res = await fetch("/api/account/branding", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school, watermark: wm }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return toast(body.error ?? "Could not save", "error");
+      apply(body);
+      setSaved({ school, wm });
+      toast("Branding saved");
+    } catch {
+      toast("Couldn't reach the server — check your connection and try again", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function upload(file: File) {
     if (file.size > 1024 * 1024) return toast("The logo must be 1 MB or smaller", "error");
     setUploading(true);
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/account/logo", { method: "POST", body: form });
-    setUploading(false);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return toast(body.error ?? "Could not upload the logo", "error");
-    apply(body);
-    toast("Logo saved");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/account/logo", { method: "POST", body: form });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return toast(body.error ?? "Could not upload the logo", "error");
+      apply(body);
+      toast("Logo saved");
+    } catch {
+      toast("Couldn't upload the logo — check your connection and try again", "error");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function removeLogo() {
-    const res = await fetch("/api/account/logo", { method: "DELETE" });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return toast(body.error ?? "Could not remove the logo", "error");
-    apply(body);
-    if (wm.kind === "logo") setWm({ ...wm, kind: "none" });
-    toast("Logo removed");
+    const ok = await confirmDialog({
+      title: "Remove your school logo?",
+      body: "Papers you export from now on won't have it. You can upload it again any time.",
+      details: wm.kind === "logo" ? ["Your faded-logo watermark is switched off too"] : undefined,
+      confirmLabel: "Remove logo",
+      danger: true,
+    });
+    if (!ok) return;
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/account/logo", { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return toast(body.error ?? "Could not remove the logo", "error");
+      apply(body);
+      if (wm.kind === "logo") setWm({ ...wm, kind: "none" });
+      toast("Logo removed");
+    } catch {
+      toast("Couldn't reach the server — check your connection and try again", "error");
+    } finally {
+      setRemoving(false);
+    }
   }
 
   const text = watermarkText(wm, school);
   const showLogoMark = wm.kind === "logo" && b.hasLogo;
 
   return (
-    <form onSubmit={save} className="space-y-5">
+    <form onSubmit={save}>
+     <div className="grid gap-6 md:grid-cols-[1fr_11rem]">
+     <div className="min-w-0 space-y-5">
       <div className="space-y-2">
         <Label htmlFor="school">School name</Label>
         <Input id="school" value={school} maxLength={200} onChange={(e) => setSchool(e.target.value)} placeholder="e.g. Greenfield International School" />
@@ -101,12 +134,26 @@ export function BrandingForm({ initial }: { initial: ClientBranding }) {
               if (f) void upload(f);
             }}
           />
-          <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
-            {uploading ? "Uploading…" : b.hasLogo ? "Replace" : "Upload logo"}
+          <Button type="button" variant="outline" size="sm" disabled={uploading || removing} onClick={() => fileRef.current?.click()}>
+            {uploading ? (
+              <>
+                <Spinner /> Uploading…
+              </>
+            ) : b.hasLogo ? (
+              "Replace"
+            ) : (
+              "Upload logo"
+            )}
           </Button>
           {b.hasLogo && (
-            <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={removeLogo}>
-              Remove
+            <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={uploading || removing} onClick={removeLogo}>
+              {removing ? (
+                <>
+                  <Spinner /> Removing…
+                </>
+              ) : (
+                "Remove"
+              )}
             </Button>
           )}
         </div>
@@ -159,8 +206,14 @@ export function BrandingForm({ initial }: { initial: ClientBranding }) {
           </div>
         )}
 
-        {/* Small page preview */}
-        <div className="relative mt-2 aspect-[210/297] w-36 overflow-hidden rounded border bg-white shadow-sm" aria-hidden>
+        <p className="text-xs text-muted-foreground">Printed faintly across every page. You can switch it off for a paper in its header.</p>
+      </fieldset>
+     </div>
+
+        {/* Live preview of an exported page */}
+        <div className="md:pt-1">
+        <div className="mb-1.5 text-xs font-medium text-muted-foreground">Preview</div>
+        <div className="relative aspect-[210/297] w-40 overflow-hidden rounded border bg-white shadow-sm md:w-full" aria-hidden>
           <div className="space-y-1 p-3">
             {b.hasLogo && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -182,10 +235,36 @@ export function BrandingForm({ initial }: { initial: ClientBranding }) {
             </div>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">Printed faintly across every page. You can switch it off for a paper in its header.</p>
-      </fieldset>
+        {school && <p className="mt-1.5 truncate text-center text-xs text-muted-foreground">{school}</p>}
+        </div>
+     </div>
 
-      <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save branding"}</Button>
+      <div className="mt-6 flex flex-wrap items-center gap-3 border-t pt-4">
+        <Button type="submit" disabled={saving || !dirty}>
+          {saving ? (
+            <>
+              <Spinner /> Saving…
+            </>
+          ) : (
+            "Save branding"
+          )}
+        </Button>
+        {dirty && !saving && (
+          <>
+            <span className="text-sm text-amber-700">You have unsaved changes</span>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              onClick={() => {
+                setSchool(saved.school);
+                setWm(saved.wm);
+              }}
+            >
+              Undo changes
+            </button>
+          </>
+        )}
+      </div>
     </form>
   );
 }

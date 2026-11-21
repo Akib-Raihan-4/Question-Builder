@@ -25,7 +25,13 @@ export function AccountActions({
 
   async function call(url: string, method: string) {
     setBusy(true);
-    const res = await fetch(url, { method });
+    let res: Response;
+    try {
+      res = await fetch(url, { method });
+    } catch {
+      setBusy(false);
+      return toast("Couldn't reach the server — check your connection and try again", "error");
+    }
     setBusy(false);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) toast(body.error ?? "Something went wrong", "error");
@@ -106,9 +112,11 @@ export function AccountActions({
         disabled={busy}
         onClick={async () =>
           (await confirmDialog({
-            title: `Remove ${name}?`,
-            body: `This deletes ${email}${papers ? ` and their ${papers} paper${papers === 1 ? "" : "s"}` : ""}. It can't be undone.`,
-            confirmLabel: "Remove",
+            title: `Remove ${name}'s account?`,
+            body: "They're signed out and can't sign in again. This can't be undone.",
+            details: [`The account ${email}`, ...(papers ? [`Their ${papers} paper${papers === 1 ? "" : "s"}`] : []), "Their school branding and own boxes"],
+            typeToConfirm: email,
+            confirmLabel: "Remove account",
             danger: true,
           })) && call(`/api/admin/users/${id}`, "DELETE")
         }

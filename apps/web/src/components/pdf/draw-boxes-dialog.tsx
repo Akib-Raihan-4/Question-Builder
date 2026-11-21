@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useUndoShortcut } from "@/components/use-undo-shortcut";
 import { cn } from "@/lib/utils";
+import { LoadingCard } from "@/components/loading-card";
 
 export type DrawnBox = { page: number; x0: number; y0: number; x1: number; y1: number };
 /** Boxes already on the document, shown faintly for reference. */
@@ -192,7 +193,7 @@ export function DrawBoxesDialog({
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-zinc-200/70 p-4">
         {error && <p className="text-sm text-destructive">Couldn&apos;t open the PDF: {error}</p>}
-        {!doc && !error && <p className="text-sm text-muted-foreground">Opening the PDF…</p>}
+        {!doc && !error && <LoadingCard label="Opening the PDF…" className="mx-auto max-w-xl" />}
         {doc &&
           measured &&
           sizes.map((size, i) => {

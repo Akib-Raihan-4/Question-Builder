@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { paperNo } from "@/lib/paper-filename";
 import { confirmDialog, toast } from "@/components/feedback";
 import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 export type PaperRow = {
   id: string;
@@ -68,16 +69,36 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
     return () => clearInterval(t);
   }, [active, router]);
 
-  async function act(id: string, kind: "reprocess" | "delete", label: string) {
-    if (kind === "delete" && !(await confirmDialog({ title: `Delete ${label}?`, body: "This removes the PDF and all its questions and boxes.", confirmLabel: "Delete", danger: true }))) return;
+  async function act(r: PaperRow, kind: "reprocess" | "delete", label: string) {
+    const id = r.id;
+    if (kind === "delete") {
+      const ok = await confirmDialog({
+        title: `Delete ${label}?`,
+        body: "This can't be undone. Teachers won't be able to pick its questions any more.",
+        details: [
+          "The question paper PDF",
+          `${r.questionCount} question${r.questionCount === 1 ? "" : "s"}, with their parts and boxes`,
+          ...(r.msStatus ? ["Its mark scheme (file and rows)"] : []),
+        ],
+        typeToConfirm: r.paperCode,
+        confirmLabel: "Delete paper",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setBusy(id);
-    const res = await fetch(kind === "delete" ? `/api/admin/papers/${id}` : `/api/admin/papers/${id}/reprocess`, {
-      method: kind === "delete" ? "DELETE" : "POST",
-    });
-    setBusy(null);
-    if (!res.ok) toast((await res.json().catch(() => ({}))).error ?? "Something went wrong", "error");
-    else toast(kind === "delete" ? `${label} deleted` : `Finding questions in ${label} again…`, kind === "delete" ? "ok" : "info");
-    router.refresh();
+    try {
+      const res = await fetch(kind === "delete" ? `/api/admin/papers/${id}` : `/api/admin/papers/${id}/reprocess`, {
+        method: kind === "delete" ? "DELETE" : "POST",
+      });
+      if (!res.ok) toast((await res.json().catch(() => ({}))).error ?? "Something went wrong", "error");
+      else toast(kind === "delete" ? `${label} deleted` : `Finding questions in ${label} again…`, kind === "delete" ? "ok" : "info");
+    } catch {
+      toast("Couldn't reach the server — check your connection and try again", "error");
+    } finally {
+      setBusy(null);
+      router.refresh();
+    }
   }
 
   const counts = { all: rows.length, needs_review: 0, published: 0, failed: 0, processing: 0 } as Record<string, number>;
@@ -114,11 +135,11 @@ export function PapersTable({ rows, subjectName }: { rows: PaperRow[]; subjectNa
         >
           PDF
         </a>
-        <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "reprocess", label)}>
+        <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r, "reprocess", label)}>
           Re-run
         </Button>
-        <Button size="sm" variant="ghost" className="text-destructive" disabled={busy === r.id} onClick={() => act(r.id, "delete", label)}>
-          Delete
+        <Button size="sm" variant="ghost" className="text-destructive" disabled={busy === r.id} onClick={() => act(r, "delete", label)}>
+          {busy === r.id ? <Spinner label="Working" /> : "Delete"}
         </Button>
       </>
     );

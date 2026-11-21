@@ -10,6 +10,7 @@ import { useBuilder } from "@/lib/builder/store";
 import { BrowsePane, type SourcePaper } from "./browse-pane";
 import { PaperPane } from "./paper-pane";
 import { toast } from "@/components/feedback";
+import { Spinner } from "@/components/ui/spinner";
 
 type Props = {
   paper: { id: string; title: string; header: PaperHeader; items: Item[]; bank: BankQuestion[] };
@@ -26,6 +27,7 @@ export function BuilderScreen({ paper, sources }: Props) {
 
   async function exportAs(query: string) {
     setExporting(true);
+    toast("Preparing your file — this can take up to a minute for long papers", "info");
     try {
       await saveRef.current?.(); // export what's on screen
       const res = await fetch(`/api/built-papers/${paper.id}/export?${query}`);
@@ -193,7 +195,13 @@ export function BuilderScreen({ paper, sources }: Props) {
             className="inline-flex h-9 items-center gap-1 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50 md:h-8"
             title={itemCount ? "Download this paper" : "Add some questions first"}
           >
-            {exporting ? "Exporting…" : "Export ▾"}
+            {exporting ? (
+              <>
+                <Spinner /> Preparing…
+              </>
+            ) : (
+              "Export ▾"
+            )}
           </button>
           {menu && (
             <>

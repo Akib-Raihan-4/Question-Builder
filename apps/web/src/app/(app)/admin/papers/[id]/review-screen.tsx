@@ -16,6 +16,7 @@ import { QuestionPanel } from "./question-panel";
 import { DetailsForm } from "./details-form";
 import { confirmDialog, toast } from "@/components/feedback";
 import { useUndoShortcut } from "@/components/use-undo-shortcut";
+import { LoadingCard } from "@/components/loading-card";
 
 /** One box change that Undo can reverse. */
 type BoxStep =
@@ -415,16 +416,15 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
             Boxes marked ✎ were edited by hand and are kept when the parser re-runs. Made a mistake? Press{" "}
             <span className="font-medium text-foreground">Undo</span> (or <kbd className="rounded border px-1">Ctrl</kbd>+<kbd className="rounded border px-1">Z</kbd>).
           </details>
-          {error && <p className="text-sm text-destructive">Could not load the PDF: {error}</p>}
+          {error && (
+            <p role="alert" className="mx-auto max-w-3xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+              Couldn&apos;t open the PDF ({error}). Check your connection and reload the page.
+            </p>
+          )}
           {!doc && !error && (
-            <div className="mx-auto max-w-3xl rounded-lg bg-background/80 px-3 py-2 text-sm text-muted-foreground" role="status">
-              {fraction != null ? `Loading the paper… ${Math.round(fraction * 100)}%` : "Loading the paper…"}
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200">
-                <div
-                  className={cn("h-full rounded-full bg-primary transition-[width]", fraction == null && "w-1/3 animate-pulse")}
-                  style={fraction != null ? { width: `${Math.max(4, fraction * 100)}%` } : undefined}
-                />
-              </div>
+            <div className="mx-auto max-w-3xl space-y-4">
+              <LoadingCard label={`Opening ${data.paper.paperCode} ${data.paper.series} ${data.paper.year}…`} fraction={fraction === 1 ? null : fraction} detail={fraction === 1 ? "Preparing the pages…" : undefined} />
+              <div className="aspect-[210/297] w-full animate-pulse rounded bg-white/70 shadow-sm ring-1 ring-black/5" />
             </div>
           )}
           {doc &&

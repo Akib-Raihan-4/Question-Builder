@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
 import { CropCanvas } from "@/components/pdf/crop-canvas";
 import type { SearchHit } from "@/lib/builder/search";
@@ -152,7 +153,13 @@ export function SearchPane({ subjectId, paperNo: fixedPaperNo, sources }: { subj
         }}
       >
         <div className="text-xs text-muted-foreground">
-          {loading && !hits.length ? "Searching…" : `${total} question${total === 1 ? "" : "s"} found`}
+          {loading && !hits.length ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Spinner /> Searching…
+            </span>
+          ) : (
+            `${total} question${total === 1 ? "" : "s"} found`
+          )}
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         {!loading && !error && total === 0 && (
@@ -163,7 +170,13 @@ export function SearchPane({ subjectId, paperNo: fixedPaperNo, sources }: { subj
         {hits.map((h) => <HitCard key={h.id} hit={h} width={width} words={words} />)}
         {hits.length < total && (
           <button disabled={loading} onClick={() => load(hits.length)} className="w-full rounded-md border bg-background py-2 text-sm hover:bg-muted">
-            {loading ? "Loading…" : `Show more (${total - hits.length} left)`}
+            {loading ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Spinner /> Loading more…
+              </span>
+            ) : (
+              `Show more (${total - hits.length} left)`
+            )}
           </button>
         )}
       </div>

@@ -20,6 +20,7 @@ export function PdfPageCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const holderRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const [drawn, setDrawn] = useState(false);
 
   useEffect(() => {
     const el = holderRef.current;
@@ -33,6 +34,7 @@ export function PdfPageCanvas({
     if (!visible) return;
     let cancelled = false;
     let task: { cancel: () => void } | null = null;
+    setDrawn(false);
     (async () => {
       const page = await doc.getPage(pageIndex + 1);
       if (cancelled || !canvasRef.current) return;
@@ -43,7 +45,7 @@ export function PdfPageCanvas({
       canvas.height = Math.floor(viewport.height);
       const t = page.render({ canvas, viewport });
       task = t;
-      await t.promise.catch(() => {});
+      await t.promise.then(() => !cancelled && setDrawn(true)).catch(() => {});
     })();
     return () => {
       cancelled = true;
@@ -53,7 +55,15 @@ export function PdfPageCanvas({
 
   return (
     <div ref={holderRef} className="absolute inset-0 bg-white">
-      <canvas ref={canvasRef} style={{ width, height }} className="block" />
+      <canvas ref={canvasRef} style={{ width, height }} className={drawn ? "block animate-fade-in" : "block opacity-0"} />
+      {!drawn && (
+        // Grey lines stand in for the page's text while it's drawn.
+        <div className="pointer-events-none absolute inset-0 space-y-3 p-[8%]" aria-hidden>
+          {[88, 72, 94, 60, 80, 70, 90, 55].map((w, i) => (
+            <div key={i} className="h-2.5 animate-pulse rounded bg-zinc-200/80" style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

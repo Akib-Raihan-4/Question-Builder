@@ -5,6 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { toast } from "@/components/feedback";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Label } from "@/components/ui/label";
 
 export function ChangePasswordForm() {
@@ -46,7 +47,7 @@ export function ChangePasswordForm() {
         <PasswordInput id="confirm" name="confirm" autoComplete="new-password" required minLength={8} />
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Change password"}</Button>
+      <Button type="submit" disabled={pending}>{pending ? <><Spinner /> Saving…</> : "Change password"}</Button>
     </form>
   );
 }

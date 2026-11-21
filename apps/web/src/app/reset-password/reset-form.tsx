@@ -6,6 +6,7 @@ import { authClient } from "@/lib/auth-client";
 import { toast } from "@/components/feedback";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
@@ -47,7 +48,7 @@ export function ResetForm({ token }: { token: string }) {
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Saving…" : "Change password"}
+            {pending ? <><Spinner /> Saving…</> : "Change password"}
           </Button>
         </form>
       </CardContent>

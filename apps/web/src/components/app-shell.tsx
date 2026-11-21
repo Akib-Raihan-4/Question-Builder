@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./logo";
-import { NavLinks, MobileMenu, type NavItem } from "./nav";
-import { SignOutButton } from "./sign-out-button";
-import { Badge } from "./ui/badge";
+import { NavLinks, MobileMenu, UserMenu, type NavItem } from "./nav";
 
 export function AppShell({
   user,
@@ -35,14 +33,10 @@ export function AppShell({
       </a>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-          <Link href="/" className="shrink-0"><Logo /></Link>
+          <Link href="/" className="shrink-0 rounded-md" aria-label="Papersmith home"><Logo /></Link>
           <NavLinks items={items} className="hidden lg:flex" />
-          <div className="ml-auto hidden items-center gap-3 text-sm lg:flex">
-            <Link href="/account" className="max-w-40 truncate text-muted-foreground hover:text-foreground hover:underline" title={`${user.email} · account and password`}>
-              {user.name}
-            </Link>
-            <Badge variant="secondary">{role}</Badge>
-            <SignOutButton />
+          <div className="ml-auto hidden items-center lg:flex">
+            <UserMenu user={user} role={role} />
           </div>
           <MobileMenu items={items} user={user} role={role} />
         </div>

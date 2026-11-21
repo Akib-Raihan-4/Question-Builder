@@ -11,6 +11,7 @@ import { isRegional, paperNo } from "@/lib/paper-filename";
 import type { BankQuestion } from "@/lib/builder/model";
 import { useBuilder } from "@/lib/builder/store";
 import { PickOverlay } from "./pick-overlay";
+import { LoadingCard } from "@/components/loading-card";
 import { SearchPane } from "./search-pane";
 
 export type SourcePaper = {
@@ -51,7 +52,7 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<{ w: number; h: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<{ stage: "questions" | "pdf"; fraction: number | null } | null>(null);
+  const [loading, setLoading] = useState<{ fraction: number | null; drawing?: boolean } | null>(null);
   const [width, setWidth] = useState(600);
   const items = useBuilder((s) => s.items);
   const ref = useRef<HTMLDivElement>(null);
@@ -71,18 +72,20 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
     setDoc(null);
     setSizes([]);
     setError(null);
-    setLoading({ stage: "questions", fraction: null });
-    const stop = onPdfProgress(paperId, (fraction) => !cancelled && setLoading({ stage: "pdf", fraction }));
+    setLoading({ fraction: null });
+    const stop = onPdfProgress(paperId, (fraction) => !cancelled && setLoading({ fraction, drawing: fraction === 1 }));
     (async () => {
       try {
+        // The questions and the PDF download at the same time; one bar shows the PDF (the big one).
+        const pdf = getPdfDoc(paperId);
+        pdf.catch(() => {}); // reported below
         const res = await fetch(`/api/builder/sources/${paperId}`);
-        if (!res.ok) throw new Error("Could not load this paper");
+        if (!res.ok) throw new Error("Couldn't open this paper. Check your connection and pick it again.");
         const data: { questions: BankQuestion[] } = await res.json();
         if (cancelled) return;
         setQuestions(data.questions);
         useBuilder.getState().addToBank(data.questions);
-        setLoading({ stage: "pdf", fraction: null });
-        const d = await getPdfDoc(paperId);
+        const d = await pdf;
         const s = [];
         for (let i = 1; i <= d.numPages; i++) {
           const v = (await d.getPage(i)).getViewport({ scale: 1 });
@@ -202,18 +205,32 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
           Click a part to add it, or the <span className="rounded bg-blue-600 px-1 font-bold text-white">+</span> tab to add the whole
           question. Click again to remove. Questions are numbered in the order you pick them.
         </p>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <div role="alert" className="mx-auto flex max-w-2xl items-center gap-3 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-800">
+            <span className="flex-1">{error}</span>
+            <button
+              type="button"
+              className="rounded-md border border-red-300 px-2 py-1 text-xs hover:bg-red-100"
+              onClick={() => {
+                const id = paperId;
+                setPaperId("");
+                requestAnimationFrame(() => setPaperId(id));
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {!error && loading && (
           <div className="mx-auto max-w-2xl space-y-4" aria-busy="true">
-            <div className="rounded-lg bg-background/80 px-3 py-2 text-sm text-muted-foreground">
-              {loading.stage === "questions" ? "Loading questions…" : `Loading the paper${loading.fraction != null ? `… ${Math.round(loading.fraction * 100)}%` : "…"}`}
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200">
-                <div
-                  className={cn("h-full rounded-full bg-primary transition-[width]", loading.fraction == null && "w-1/3 animate-pulse")}
-                  style={loading.fraction != null ? { width: `${Math.max(5, loading.fraction * 100)}%` } : undefined}
-                />
-              </div>
-            </div>
+            <LoadingCard
+              label={`Opening ${(() => {
+                const p = sources.find((x) => x.id === paperId);
+                return p ? `${p.paperCode} ${p.series} ${p.year}` : "the paper";
+              })()}…`}
+              fraction={loading.drawing ? null : loading.fraction}
+              detail={loading.drawing ? "Preparing the pages…" : loading.fraction == null ? "Getting the questions and the PDF" : undefined}
+            />
             {[0, 1].map((i) => (
               <div key={i} className="aspect-[210/297] w-full animate-pulse rounded bg-white/70 shadow-sm ring-1 ring-black/5" />
             ))}

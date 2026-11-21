@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { startNavigation } from "@/components/navigation-progress";
 
 export function LoginForm() {
   const router = useRouter();
@@ -20,12 +22,21 @@ export function LoginForm() {
     const form = new FormData(e.currentTarget);
     setPending(true);
     setError(null);
-    const { error } = await authClient.signIn.email({
-      email: String(form.get("email")),
-      password: String(form.get("password")),
-    });
-    setPending(false);
-    if (error) return setError(error.message ?? "Sign in failed");
+    try {
+      const { error } = await authClient.signIn.email({
+        email: String(form.get("email")),
+        password: String(form.get("password")),
+      });
+      if (error) {
+        setPending(false);
+        return setError(error.message ?? "Sign in failed");
+      }
+    } catch {
+      setPending(false);
+      return setError("Couldn't reach the server. Check your connection and try again.");
+    }
+    // Signed in: keep the button busy until the next page is on screen.
+    startNavigation();
     router.replace("/");
     router.refresh();
   }
@@ -47,9 +58,19 @@ export function LoginForm() {
               </Link>
             </p>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Signing in…" : "Sign in"}
+          {error && (
+            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+              {error}
+            </p>
+          )}
+          <Button type="submit" className="w-full" disabled={pending} aria-busy={pending}>
+            {pending ? (
+              <>
+                <Spinner /> Signing in…
+              </>
+            ) : (
+              "Sign in"
+            )}
           </Button>
         </form>
       </CardContent>
