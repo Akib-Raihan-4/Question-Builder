@@ -259,7 +259,7 @@ export function ReviewScreen({ initial }: { initial: ReviewData }) {
         </div>
         <div className="flex w-full items-center gap-2 md:ml-auto md:w-auto">
           <Button size="sm" variant="ghost" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>{editing ? "Close details" : "Edit details"}</Button>
-          <Link href={`/admin/papers/${paperId}/mark-scheme`} className="rounded-md px-2 py-1 text-[0.8rem] font-medium hover:bg-muted pointer-coarse:py-2">
+          <Link href={`/admin/papers/${paperId}/mark-scheme`} className="whitespace-nowrap rounded-md px-2 py-1 text-[0.8rem] font-medium hover:bg-muted pointer-coarse:py-2">
             Mark scheme
           </Link>
           {issues.length > 0 && !published && (

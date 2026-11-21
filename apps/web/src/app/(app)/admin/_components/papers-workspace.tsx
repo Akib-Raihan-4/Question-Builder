@@ -195,10 +195,10 @@ export function PapersWorkspace({ subjects, rows }: { subjects: Subject[]; rows:
           </div>
         )}
 
-        {showUpload && current && <UploadPanel key={current.id} subjects={subjects} defaultSubjectId={current.id} />}
+        {showUpload && current && <UploadPanel key={`upload-${current.id}`} subjects={subjects} defaultSubjectId={current.id} />}
         {current && <MsReviewBanner subjectId={current.id} waiting={rows.filter((r) => r.subjectId === active && r.msStatus === "needs_review").length} />}
         {current && (
-          <div key={active} className="animate-fade-in">
+          <div key={`papers-${active}`} className="animate-fade-in">
             <PapersTable rows={rows.filter((r) => r.subjectId === active)} subjectName={`${current.name} (${current.qualification})`} />
           </div>
         )}

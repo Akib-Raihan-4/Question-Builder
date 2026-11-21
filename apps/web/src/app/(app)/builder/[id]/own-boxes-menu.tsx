@@ -82,7 +82,7 @@ export function OwnBoxesMenu({ item, q }: { item: Item; q: BankQuestion }) {
       <Popover.Root open={open} onOpenChange={(o) => { setOpen(o); if (o && q.hasMarkScheme) loadMs([q.id]).catch(() => {}); }}>
         <Popover.Trigger
           className={cn(
-            "rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
+            "whitespace-nowrap rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
             anyOwn ? "bg-violet-50 text-violet-800 hover:bg-violet-100" : "text-zinc-500 hover:bg-zinc-100",
           )}
           title="Redraw the boxes for this question, for your papers only"

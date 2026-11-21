@@ -265,7 +265,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
             onClick={() => setMsOpen(!showMs)}
             aria-pressed={showMs}
             className={cn(
-              "rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
+              "whitespace-nowrap rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
               showMs ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
             )}
             title={showMs ? "Hide the mark scheme" : "Show the mark scheme under this question"}

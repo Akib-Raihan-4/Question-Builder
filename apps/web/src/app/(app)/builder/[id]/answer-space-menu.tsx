@@ -25,7 +25,7 @@ export function AnswerSpaceMenu({ item, number }: { item: Item; number: number }
     <Popover.Root>
       <Popover.Trigger
         className={cn(
-          "rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
+          "whitespace-nowrap rounded px-1.5 py-0.5 text-xs pointer-coarse:py-1.5",
           changed ? "bg-sky-50 text-sky-800 hover:bg-sky-100" : "text-zinc-500 hover:bg-zinc-100",
         )}
         title="Answer space for this question"

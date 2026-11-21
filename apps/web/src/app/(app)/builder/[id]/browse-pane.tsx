@@ -158,14 +158,14 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
             setPaperId(sources.find((s) => s.subjectId === sid && (!no || paperNo(s.paperCode) === Number(no)))?.id ?? "");
           }}
           options={subjects.map(([id, name]) => ({ value: id, label: name }))}
-          className="max-w-[16rem]"
+          className="w-full sm:w-auto sm:max-w-[16rem]"
         />
         {mode === "browse" && (
           <Select
             aria-label="Past paper"
             value={paperId}
             onValueChange={setPaperId}
-            className="flex-1 sm:max-w-xs"
+            className="w-full sm:w-auto sm:flex-1 sm:max-w-xs"
             options={papers.map((p) => ({
               value: p.id,
               label: `${p.series} ${p.year} · ${p.paperCode}`,
