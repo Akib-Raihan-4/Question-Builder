@@ -3,7 +3,8 @@
 For every page we return two lists of boxes (PDF points, top-left origin, rounded to 0.5 pt):
   ink   – everything that must be kept: text lines (except rows of answer dots), drawings
           (diagrams, graph grids, tables, boxes) and images.
-  dots  – rows of answer dots ("......", also ". . ." and "...... , ......" for coordinates).
+  dots  – rows of answer dots ("......", also ". . ." and "...... , ......" for coordinates), and
+          ruled answer lines typed as underscores ("________", IAL Mathematics booklets).
 A labelled answer line ("Percentage uncertainty = ......") is one text line with words in it,
 so it counts as ink and is always kept.
 
@@ -56,7 +57,7 @@ def page_layout(page: pymupdf.Page) -> PageLayout:
             horizontal = abs(line["dir"][1]) < 0.01
             if not horizontal and (x1 < EDGE or x0 > W - EDGE):
                 continue  # margin warnings
-            if DOT_LINE.match(text) and text.count(".") + text.count("…") * 3 >= 10:
+            if DOT_LINE.match(text) and (text.count(".") + text.count("…") * 3 >= 10 or text.count("_") >= 20):
                 dots.append(_box(line["bbox"]))
             else:
                 ink.append(_box(line["bbox"]))
