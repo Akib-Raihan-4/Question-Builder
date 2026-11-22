@@ -12,7 +12,7 @@ SAMPLES = ROOT / "samples"
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from parsers import get_parser  # noqa: E402
+from parsers import parser_for  # noqa: E402
 
 
 # Question papers with picture-only pages (part of the text is missing), or scans: their questions
@@ -35,7 +35,8 @@ def golden_name(pdf: Path) -> str:
 
 
 def snapshot(pdf: Path) -> dict:
-    r = get_parser("edexcel").segment(pdf.read_bytes())
+    data = pdf.read_bytes()
+    r = parser_for("edexcel", data).segment(data)
     rnd = lambda v: round(v * 2) / 2  # 0.5 pt
     reg = lambda g: [g.page, rnd(g.x0), rnd(g.y0), rnd(g.x1), rnd(g.y1)]
     return {

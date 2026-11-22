@@ -7,7 +7,7 @@ from fastapi.responses import Response
 
 from cover import read_cover
 from docx_export import DocxSpec, build_docx
-from parsers import PARSERS, get_parser
+from parsers import PARSERS, IalPureParser, get_parser, parser_for
 from parsers.base import SegmentResult
 from page_layout import LayoutResult, paper_layout
 from ms_reader import MsResult, read_mark_scheme
@@ -25,19 +25,19 @@ app = FastAPI(title="Papersmith processor", docs_url=None, redoc_url=None, opena
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "parsers": {k: p.version for k, p in PARSERS.items()}}
+    return {"ok": True, "parsers": {**{k: p.version for k, p in PARSERS.items()}, "edexcel-ial-pure": IalPureParser.version}}
 
 
 @app.post("/segment/qp", response_model=SegmentResult, dependencies=[Depends(require_key)])
 async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) -> SegmentResult:
     try:
-        parser = get_parser(parser_key)
+        get_parser(parser_key)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     data = await file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
-    return parser.segment(data)
+    return parser_for(parser_key, data).segment(data)
 
 
 @app.post("/segment/ms", response_model=MsResult, dependencies=[Depends(require_key)])
