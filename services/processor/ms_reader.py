@@ -368,6 +368,12 @@ def read_mark_scheme(data: bytes) -> MsResult:
                     cq = ctx[0] if ctx else None
                     if (cq is None and p[0] > 3) or (cq is not None and not (cq <= p[0] <= cq + 3)):
                         p = None
+                    # A bare number that skips a question and has a number stacked right above it is
+                    # a fraction's denominator in the working (the "9" of 1/9), not the next question.
+                    elif cq is not None and p[0] > cq + 1 and not p[1] and not p[2] and any(
+                        abs(w[0] - srt[0][0]) < 4 and 0 < srt[0][1] - w[1] < 22 and re.fullmatch(r"\d+", w[4]) for w in words
+                    ):
+                        p = None
                 if p and current is not None and label_text(*p) == current.label and not any(e[1] == "label" for e in events):
                     p = None  # the same label repeated at the top of a page: the row continues
                 if p and events and events[-1][1] == "label" and label_text(*events[-1][2]) == label_text(*p):

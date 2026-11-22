@@ -19,7 +19,8 @@ from .base import BaseParser, Question, Region
 
 # Cover: "Pure Mathematics P3", paper reference "WMA13/01".
 COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\s*/\s*0?1\b", re.I)
-START = re.compile(r"^\s*(\d{1,2})\s*\.(?:\s|$)")
+# "1." — also "3.." and "7<tab>" (a missing dot), as printed on some papers.
+START = re.compile(r"^\s*(\d{1,2})\s*(?:\.+(?:\s|$)|\t)")
 CONTINUED = re.compile(r"^\s*Question\s+(\d{1,2})\s+continued", re.I)
 TOTAL = re.compile(r"\(\s*Total\s+for\s+Question\s+(\d+)\s+(?:is|=)\s+(\d+)\s+marks?\s*\)", re.I)
 # Older papers (to 2022): "(Total 6 marks)" — the question is the one being answered.
