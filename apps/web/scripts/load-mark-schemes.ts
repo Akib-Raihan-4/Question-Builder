@@ -18,8 +18,8 @@ async function main() {
   const [folder, paperCode] = process.argv.slice(2);
   if (!folder || !paperCode) throw new Error("usage: load-mark-schemes.ts <folder> <paperCode>");
   for (const name of readdirSync(folder).filter((f) => f.toLowerCase().endsWith(".pdf")).sort()) {
-    const SERIES: Record<string, string> = { JAN: "January", JANUARY: "January", JUNE: "June", JUN: "June", MAYJUNE: "June", MJ: "June", OCT: "October", OCTOBER: "October", NOV: "November", NOVEMBER: "November" };
-    const a = name.match(/(January|June|October|November)\s+(\d{4})/i);
+    const SERIES: Record<string, string> = { SPECIMEN: "Specimen", JAN: "January", JANUARY: "January", JUNE: "June", JUN: "June", MAYJUNE: "June", MJ: "June", OCT: "October", OCTOBER: "October", NOV: "November", NOVEMBER: "November" };
+    const a = name.match(/(January|June|October|November|Specimen)\s+(\d{4})/i);
     const b = name.match(/(20\d{2})_(Jan|January|June|Jun|MayJune|MJ|Oct|October|Nov|November)(?:_|\b)/i);
     const series = a ? SERIES[a[1].toUpperCase()] : b ? SERIES[b[2].toUpperCase()] : null;
     const year = a ? Number(a[2]) : b ? Number(b[1]) : null;
