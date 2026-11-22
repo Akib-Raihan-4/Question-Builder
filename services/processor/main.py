@@ -8,7 +8,9 @@ from fastapi.responses import Response
 from cover import read_cover
 from docx_export import DocxSpec, build_docx
 from parsers import PARSERS, IalPureParser, get_parser, parser_for
+import pymupdf
 from parsers.base import SegmentResult
+from ial_pure_ms import is_ial_pure_ms, tidy_rows
 from page_layout import LayoutResult, paper_layout
 from ms_reader import MsResult, read_mark_scheme
 
@@ -46,7 +48,18 @@ async def segment_ms(file: UploadFile = File(...)) -> MsResult:
     data = await file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
-    return read_mark_scheme(data)
+    return read_ms(data)
+
+
+def read_ms(data: bytes) -> MsResult:
+    """The general reader; IAL Pure Mathematics P1–P4 mark schemes then have their notes cut out."""
+    result = read_mark_scheme(data)
+    if result.status == "ok":
+        doc = pymupdf.open(stream=data, filetype="pdf")
+        if is_ial_pure_ms(doc):
+            result = tidy_rows(doc, result)
+            result.reader_version = f"{result.reader_version}+ial-pure"
+    return result
 
 
 @app.post("/layout", response_model=LayoutResult, dependencies=[Depends(require_key)])

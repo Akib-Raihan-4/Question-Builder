@@ -1,4 +1,5 @@
-"""Edexcel International A Level Pure Mathematics P1–P4 (WMA11–WMA14): whole questions only.
+"""Edexcel International A Level Pure Mathematics P1–P4 (WMA11–WMA14), and the older Core
+Mathematics C12 / C34 (WMA01 / WMA02): whole questions only.
 
 These papers have no separate answer booklet: each question starts with its bold number ("1.")
 in the left margin, its parts (a), (b)… and their marks follow, then ruled answer lines run over
@@ -18,7 +19,8 @@ import pymupdf
 from .base import BaseParser, Question, Region
 
 # Cover: "Pure Mathematics P3", paper reference "WMA13/01".
-COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\s*/\s*0?1\b", re.I)
+# Also the units before P1–P4: "Core Mathematics C12 / C34" (WMA01, WMA02), same booklet layout.
+COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\s*/\s*0?1\b|Core\s+Mathematics\s+C(?:12|34)\b|\bWMA0[12]\s*/\s*0?1\b", re.I)
 # "1." — also "3.." and "7<tab>" (a missing dot), as printed on some papers.
 START = re.compile(r"^\s*(\d{1,2})\s*(?:\.+(?:\s|$)|\t)")
 CONTINUED = re.compile(r"^\s*Question\s+(\d{1,2})\s+continued", re.I)

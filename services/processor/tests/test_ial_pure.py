@@ -36,3 +36,26 @@ def test_pure_papers_whole_questions(pdf):
 def test_other_papers_keep_the_edexcel_parser(pdf):
     data = pdf.read_bytes()
     assert type(parser_for("edexcel", data)) is EdexcelParser
+
+
+MS_JUNE_2025 = SAMPLES / "IAL-P3-pmt" / "June 2025 MS.pdf"
+
+
+@pytest.mark.skipif(not MS_JUNE_2025.exists(), reason="no IAL P3 mark scheme sample")
+def test_ial_pure_ms_notes_are_cut_out_like_the_admin_did():
+    """June 2025 P3 as an admin tidied it by hand: one box per part, the scheme only."""
+    from main import read_ms
+
+    r = read_ms(MS_JUNE_2025.read_bytes())
+    assert r.reader_version.endswith("+ial-pure")
+    got = {x.label: [(g.page + 1, round(g.y1)) for g in x.regions] for x in r.rows}
+    admin = {
+        "1(a)": [(7, 173)], "1(b)": [(7, 248)], "1(c)": [(8, 180)], "1(d)": [(8, 307)], "2(a)": [(9, 171)],
+        "3(a)": [(10, 157)], "4(a)": [(13, 282)], "4(b)": [(14, 176)], "6(c)": [(17, 190)],
+        "8(a)": [(20, 332), (21, 213)], "9(a)": [(23, 202)], "9(b)": [(24, 248), (25, 255)], "10(b)": [(29, 321)],
+    }
+    assert "2(x)" not in got and "7(b)" not in got  # rows that were only notes
+    assert len(got) == 29
+    for label, boxes in admin.items():
+        assert [p for p, _ in got[label]] == [p for p, _ in boxes], label
+        assert all(abs(a[1] - b[1]) <= 8 for a, b in zip(got[label], boxes)), (label, got[label], boxes)
