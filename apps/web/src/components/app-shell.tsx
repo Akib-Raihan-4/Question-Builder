@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./logo";
 import { NavLinks, MobileMenu, UserMenu, type NavItem } from "./nav";
+import { RefreshOnHistory } from "./refresh-on-history";
 
 export function AppShell({
   user,
@@ -25,6 +26,7 @@ export function AppShell({
   ];
   return (
     <div className="min-h-screen">
+      <RefreshOnHistory />
       <a
         href="#main"
         className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm font-medium shadow focus:not-sr-only focus:fixed focus:left-3 focus:top-3"

@@ -60,6 +60,8 @@ export function MarkSchemeScreen({
   initial: MarkSchemeReview | null;
 }) {
   const [ms, setMs] = useState(initial);
+  // Fresh data from the server (e.g. after coming back with the browser's Back button).
+  useEffect(() => setMs(initial), [initial]);
   const [busy, setBusy] = useState(false);
   // Upload progress: 0–1 while the file is being sent, then "saving" until the server answers.
   const [sending, setSending] = useState<{ name: string; fraction: number } | null>(null);

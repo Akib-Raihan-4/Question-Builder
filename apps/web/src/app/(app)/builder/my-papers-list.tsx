@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/feedback";
 import { DeletePaperButton, DuplicatePaperButton } from "./paper-actions";
@@ -53,6 +53,11 @@ function PaperRow({ paper: p }: { paper: Paper }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(p.title);
+  // Follow the server's title (renamed in the builder, then back here) unless mid-rename.
+  useEffect(() => {
+    if (!editing) setTitle(p.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the server's title changes
+  }, [p.title]);
 
   async function save() {
     setEditing(false);

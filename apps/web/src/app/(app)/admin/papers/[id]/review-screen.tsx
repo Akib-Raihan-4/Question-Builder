@@ -45,6 +45,8 @@ async function api(url: string, method: string, body?: unknown) {
 
 export function ReviewScreen({ initial }: { initial: ReviewData }) {
   const [data, setData] = useState(initial);
+  // Fresh data from the server (e.g. after coming back with the browser's Back button).
+  useEffect(() => setData(initial), [initial]);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [regionId, setRegionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
