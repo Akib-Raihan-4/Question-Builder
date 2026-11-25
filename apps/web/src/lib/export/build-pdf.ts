@@ -3,7 +3,7 @@ import type { PaperHeader } from "@/db/schema";
 import { pdfToPdfLib, topDownToPdfLibY } from "@/lib/coords";
 import { itemBlocks, itemMarks, totalMarks, type Bank, type Item } from "@/lib/builder/model";
 import { blockHeight, LINE_PITCH } from "@/lib/builder/answer-space";
-import { A4, DEFAULT_LAYOUT, layoutPaper } from "./layout";
+import { A4, DEFAULT_LAYOUT, LOGO_GAP, LOGO_MAX_H, blockSizes, layoutPaper } from "./layout";
 import type { ExportBranding, LogoImage } from "@/lib/watermark";
 import { fadePngToWhite } from "./fade-png";
 
@@ -27,8 +27,6 @@ export type ExportInput = {
 };
 
 
-const LOGO_MAX_H = 40; // pt (~14 mm)
-const LOGO_GAP = 8;
 
 /**
  * Faint watermark across the page, drawn ON TOP of the questions with "multiply" blending so it
@@ -130,13 +128,7 @@ export async function buildPaperPdf(input: ExportInput): Promise<Uint8Array> {
   // ---- Layout ------------------------------------------------------------------------------
   // Each item is a list of blocks: crops of the original, then any added lines / blank space.
   const blocksPerItem = items.map((it) => itemBlocks(it, bank));
-  const layout = layoutPaper(
-    blocksPerItem.map((bs) =>
-      // Lines and space have no width of their own (w 1 = never scaled); they span the content width.
-      bs.map((b) => (b.kind === "crop" ? { w: b.region.x1 - b.region.x0, h: b.region.y1 - b.region.y0 } : { w: 1, h: blockHeight(b) })),
-    ),
-    headerHeight,
-  );
+  const layout = layoutPaper(blocksPerItem.map(blockSizes), headerHeight);
   const pages = Array.from({ length: layout.pages }, () => out.addPage([A4.w, A4.h]));
   const H = A4.h;
 

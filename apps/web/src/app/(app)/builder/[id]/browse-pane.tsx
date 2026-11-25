@@ -27,6 +27,9 @@ export type SourcePaper = {
 };
 
 
+/** The past paper last picked in the builder, remembered in this browser. */
+const LAST_PAPER_KEY = "builder.lastPaper";
+
 export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
   // What to pick from: a subject, or — when it has several papers (Maths B Paper 1 and Paper 2) —
   // each paper of it separately. Regional versions (2R) go with their paper.
@@ -43,11 +46,33 @@ export function BrowsePane({ sources }: { sources: SourcePaper[] }) {
     );
   }, [sources]);
   const [mode, setMode] = useState<"browse" | "search">("browse");
-  const [collection, setCollection] = useState<string>(subjects[0]?.[0] ?? "");
+  // Open on the past paper picked last time (this browser), if it's still published.
+  const [start] = useState(() => {
+    let last: SourcePaper | undefined;
+    try {
+      const id = localStorage.getItem(LAST_PAPER_KEY);
+      last = sources.find((s) => s.id === id);
+    } catch {
+      /* storage unavailable: start from the first paper */
+    }
+    if (!last) return { collection: subjects[0]?.[0] ?? "", paperId: "" };
+    const n = paperNo(last.paperCode);
+    const split = subjects.some(([key]) => key === `${last!.subjectId}|${n}`);
+    return { collection: split ? `${last.subjectId}|${n}` : `${last.subjectId}|`, paperId: last.id };
+  });
+  const [collection, setCollection] = useState<string>(start.collection);
   const [subjectId, collectionNo] = collection.split("|");
   const inCollection = (s: SourcePaper) => s.subjectId === subjectId && (!collectionNo || paperNo(s.paperCode) === Number(collectionNo));
   const papers = sources.filter(inCollection);
-  const [paperId, setPaperId] = useState(papers[0]?.id ?? "");
+  const [paperId, setPaperId] = useState(start.paperId || papers[0]?.id || "");
+  useEffect(() => {
+    if (!paperId) return;
+    try {
+      localStorage.setItem(LAST_PAPER_KEY, paperId);
+    } catch {
+      /* not remembered: fine */
+    }
+  }, [paperId]);
   const [questions, setQuestions] = useState<BankQuestion[] | null>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<{ w: number; h: number }[]>([]);

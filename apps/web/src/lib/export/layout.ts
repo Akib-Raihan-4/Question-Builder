@@ -13,8 +13,18 @@
  *    (e.g. a question's opening lines) is kept on the same page as the region after it.
  */
 
+import { blockHeight, type Block } from "@/lib/builder/answer-space";
+
 export const A4 = { w: 595.28, h: 841.89 };
 const MM = 72 / 25.4;
+/** School logo above the title on page 1. */
+export const LOGO_MAX_H = 40; // pt (~14 mm)
+export const LOGO_GAP = 8;
+
+/** What the layout needs of each block: crops keep their size; lines and space have no width of
+ * their own (w 1 = never scaled) and span the content width. */
+export const blockSizes = (blocks: Block[]): Size[] =>
+  blocks.map((b) => (b.kind === "crop" ? { w: b.region.x1 - b.region.x0, h: b.region.y1 - b.region.y0 } : { w: 1, h: blockHeight(b) }));
 
 export type LayoutOptions = {
   margin: number;

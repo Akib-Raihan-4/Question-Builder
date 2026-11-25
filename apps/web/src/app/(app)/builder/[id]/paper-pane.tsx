@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -9,6 +9,7 @@ import { chosenParts, dependencyWarnings, itemBlocks, itemMarks, itemRegions, to
 import { LINE_PITCH, LINES_BOTTOM } from "@/lib/builder/answer-space";
 import { AnswerSpaceMenu } from "./answer-space-menu";
 import { MarkSchemePreview } from "./mark-scheme-preview";
+import { pageBreaks } from "@/lib/builder/pages";
 import { OwnBoxesMenu } from "./own-boxes-menu";
 import { useBuilder } from "@/lib/builder/store";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,8 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
   const target = header.targetMarks;
   const branding = useBranding();
   const showLogo = Boolean(branding?.hasLogo) && header.showLogo !== false;
+  // Where the exported A4 pages will break (the export's own layout, run on the same blocks).
+  const paging = useMemo(() => pageBreaks(items, bank, header, showLogo), [items, bank, header, showLogo]);
   const sensors = useSensors(
     // Mouse: drag after moving 4px. Touch: press and hold briefly, so scrolling still works.
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -92,6 +95,12 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
               {total}
               {target ? ` / ${target}` : ""} marks
             </span>
+            {items.length > 0 && (
+              <span className="text-muted-foreground" title="Pages in the exported PDF (A4)">
+                {" "}
+                · {paging.pages} page{paging.pages === 1 ? "" : "s"}
+              </span>
+            )}
           </span>
           {target && total > target ? <span className="text-xs text-red-600">{total - target} over your target</span> : null}
           <label className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
@@ -217,13 +226,19 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
               <SortableContext items={items.map((i) => i.questionId)} strategy={verticalListSortingStrategy}>
                 {items.map((item, index) => (
-                  <PreviewItem key={item.questionId} item={item} index={index} count={items.length} scale={scale} />
+                  <PreviewItem key={item.questionId} item={item} index={index} count={items.length} scale={scale} breaks={paging.breaks} />
                 ))}
               </SortableContext>
             </DndContext>
           )}
           {items.length > 0 && (
-            <div className="mt-4 px-6 text-right text-sm font-bold">TOTAL FOR PAPER IS {total} MARKS</div>
+            <>
+              {paging.totalPage > Math.max(1, ...paging.breaks.values()) && <PageBreak n={paging.totalPage} />}
+              <div className="mt-4 px-6 text-right text-sm font-bold">TOTAL FOR PAPER IS {total} MARKS</div>
+              <p className="mt-6 text-center text-[11px] text-muted-foreground">
+                End of page {paging.pages} · the PDF has {paging.pages} A4 page{paging.pages === 1 ? "" : "s"}
+              </p>
+            </>
           )}
         </div>
       </div>
@@ -231,7 +246,20 @@ export function PaperPane({ saveState, onCollapse }: { saveState: string; onColl
   );
 }
 
-function PreviewItem({ item, index, count, scale }: { item: Item; index: number; count: number; scale: number }) {
+/** Where an exported A4 page ends and the next begins, drawn across the preview sheet. */
+function PageBreak({ n, style }: { n: number; style?: React.CSSProperties }) {
+  return (
+    <div role="separator" aria-label={`Page ${n} starts here`} className="relative my-3 h-7 select-none bg-zinc-100" style={style}>
+      <div className="absolute inset-x-0 top-0 border-t border-dashed border-zinc-300" />
+      <div className="absolute inset-x-0 bottom-0 border-b border-dashed border-zinc-300" />
+      <span className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+        Page {n}
+      </span>
+    </div>
+  );
+}
+
+function PreviewItem({ item, index, count, scale, breaks }: { item: Item; index: number; count: number; scale: number; breaks: Map<string, number> }) {
   const bank = useBuilder((s) => s.bank);
   const { removeItem } = useBuilder.getState();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.questionId });
@@ -254,6 +282,7 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn("group relative scroll-mt-2 border-b border-dashed border-zinc-200 pb-3 pt-2", isDragging && "z-10 bg-white shadow-lg")}
     >
+      {breaks.get(`${index}:0`) && <PageBreak n={breaks.get(`${index}:0`)!} style={{ marginTop: -8 }} />}
       <div className="mb-1 flex items-center gap-1 px-2 opacity-70 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100">
         <span className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
           {q.paperLabel} · Q{q.number}
@@ -302,8 +331,9 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
           {number}
         </div>
         <div className="min-w-0 flex-1 space-y-1 pr-6">
-          {blocks.map((b, i) =>
-            b.kind === "crop" ? (
+          {blocks.map((b, i) => {
+            const pageStart = i > 0 ? breaks.get(`${index}:${i}`) : undefined;
+            const el = b.kind === "crop" ? (
               <CropCanvas key={i} paperId={q.paperId} page={b.region.page} rect={b.region} scale={scale} />
             ) : b.kind === "lines" ? (
               <div key={i} aria-label={`${b.count} answer lines`} style={{ paddingTop: 6 * scale, paddingBottom: LINES_BOTTOM * scale }}>
@@ -313,8 +343,17 @@ function PreviewItem({ item, index, count, scale }: { item: Item; index: number;
               </div>
             ) : (
               <div key={i} aria-label="Blank space" className="rounded-sm bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(244_244_245)_6px,rgb(244_244_245)_7px)]" style={{ height: b.h * scale }} />
-            ),
-          )}
+            );
+            return pageStart ? (
+              <Fragment key={i}>
+                {/* Across the whole sheet: out past the number column and the right padding. */}
+                <PageBreak n={pageStart} style={{ marginLeft: -numberColW, marginRight: -24 }} />
+                {el}
+              </Fragment>
+            ) : (
+              el
+            );
+          })}
         </div>
       </div>
       <div className="pr-6 text-right text-[13px] font-bold" style={{ fontFamily: "Times New Roman, serif" }}>
