@@ -54,8 +54,9 @@ async def segment_ms(file: UploadFile = File(...)) -> MsResult:
 
 def read_ms(data: bytes) -> MsResult:
     """The general reader — except IAL Mathematics mark schemes (P1–P4, C12/C34, M1, S1), which are
-    read by their ruled tables (ial_maths_ms.py). If that finds fewer questions (a mark scheme
-    without table lines), the general reader with the notes cut out is used instead."""
+    read by their ruled tables (ial_maths_ms.py). If the general reader (notes cut out) finds a
+    question that the table reader skipped (a mark scheme without table lines), that is used
+    instead; questions it finds beyond the last one are not counted (stray rows such as "12")."""
     result = read_mark_scheme(data)
     if result.status == "ok":
         doc = pymupdf.open(stream=data, filetype="pdf")
@@ -63,7 +64,9 @@ def read_ms(data: bytes) -> MsResult:
             result = tidy_rows(doc, result)
             result.reader_version = f"{result.reader_version}+ial-pure"
             tables = read_ial_maths_ms(doc)
-            if len({r.question for r in tables.rows}) >= len({r.question for r in result.rows}):
+            found = {r.question for r in tables.rows}
+            gaps = {r.question for r in result.rows} - found
+            if found and not any(q < max(found) for q in gaps):
                 result = tables
     return result
 
