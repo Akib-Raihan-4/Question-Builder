@@ -10,6 +10,7 @@ from docx_export import DocxSpec, build_docx
 from parsers import PARSERS, IalPureParser, get_parser, parser_for
 import pymupdf
 from parsers.base import SegmentResult
+from ial_maths_ms import read_ial_maths_ms
 from ial_pure_ms import is_ial_pure_ms, tidy_rows
 from page_layout import LayoutResult, paper_layout
 from ms_reader import MsResult, read_mark_scheme
@@ -52,13 +53,18 @@ async def segment_ms(file: UploadFile = File(...)) -> MsResult:
 
 
 def read_ms(data: bytes) -> MsResult:
-    """The general reader; IAL Pure Mathematics P1–P4 mark schemes then have their notes cut out."""
+    """The general reader — except IAL Mathematics mark schemes (P1–P4, C12/C34, M1, S1), which are
+    read by their ruled tables (ial_maths_ms.py). If that finds fewer questions (a mark scheme
+    without table lines), the general reader with the notes cut out is used instead."""
     result = read_mark_scheme(data)
     if result.status == "ok":
         doc = pymupdf.open(stream=data, filetype="pdf")
         if is_ial_pure_ms(doc):
             result = tidy_rows(doc, result)
             result.reader_version = f"{result.reader_version}+ial-pure"
+            tables = read_ial_maths_ms(doc)
+            if len({r.question for r in tables.rows}) >= len({r.question for r in result.rows}):
+                result = tables
     return result
 
 

@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
 import { HScroll } from "@/components/h-scroll";
-import { printedPart } from "@/lib/mark-schemes/link";
+import { parseRowLabel, printedPart } from "@/lib/mark-schemes/link";
 import type { MarkSchemeReview, MsRowView } from "@/lib/mark-schemes/server";
 import { cn } from "@/lib/utils";
 import { postWithProgress } from "@/lib/upload";
 import { DrawBoxDialog } from "./draw-box-dialog";
+import { DrawBoxesDialog, compareLabels, type DrawnBox } from "@/components/pdf/draw-boxes-dialog";
 
 type Box = { page: number; x0: number; y0: number; x1: number; y1: number };
 type Q = { id: string; number: number; totalMarks: number; parts: { id: string; label: string; marks: number }[] };
@@ -66,7 +67,8 @@ export function MarkSchemeScreen({
   // Upload progress: 0–1 while the file is being sent, then "saving" until the server answers.
   const [sending, setSending] = useState<{ name: string; fraction: number } | null>(null);
   const [filter, setFilter] = useState<"all" | "look">("all");
-  const [drawFor, setDrawFor] = useState<Slot | null>(null);
+  // The whole-mark-scheme editor: the label new boxes get, and where it opens.
+  const [editor, setEditor] = useState<{ newLabel: string; startPage?: number } | null>(null);
   const [adjust, setAdjust] = useState<MsRowView | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -188,6 +190,15 @@ export function MarkSchemeScreen({
           />
           {ms && (
             <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || ms.status === "processing"}
+                onClick={() => setEditor({ newLabel: rows[0]?.label ?? "1", startPage: rows[0]?.regions[0]?.page })}
+                title="Every row's boxes on the mark scheme: draw, move, resize, rename or remove them"
+              >
+                Edit mark scheme
+              </Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>Replace PDF</Button>
               <Button variant="ghost" size="sm" disabled={busy || ms.status === "processing"} onClick={() => run(() => call(`${base}/reprocess`, { method: "POST" }), "Reading again…")}>
                 Re-read
@@ -233,21 +244,39 @@ export function MarkSchemeScreen({
       </div>
 
       {sending && <UploadProgress name={sending.name} fraction={sending.fraction} />}
-      {drawFor && ms && (
-        <DrawBoxDialog
-          paperId={paper.id}
-          version={ms.fileVersion}
-          title={drawFor.title}
-          rows={rows}
-          startPage={startPageFor(drawFor)}
-          onClose={() => setDrawFor(null)}
-          onSave={async (boxes) => {
-            const slot = drawFor;
-            setDrawFor(null);
-            await run(
-              () => call(`${base}/rows`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questionId: slot.questionId, partId: slot.partId, boxes }) }),
-              `Box added to ${slot.title}`,
-            );
+      {editor && ms && (
+        <DrawBoxesDialog
+          docKey={msDocKey(paper.id, ms.fileVersion)}
+          heading={`Edit the mark scheme · ${paper.label}`}
+          help="Every row is a coloured box. Drag on a page to add a box to the row named on the left of the bar below (type “1(a)”, then “1(b)” for the next). Click a box to move, resize, rename or remove it. Ctrl+Z undoes."
+          boxLabel=""
+          rows={{
+            newLabel: editor.newLabel,
+            suggestions: [
+              ...new Set([
+                ...questions.flatMap((q) => [String(q.number), ...q.parts.map((p) => `${q.number}${printedPart(p.label)}`)]),
+                ...rows.map((r) => r.label),
+              ]),
+            ].sort(compareLabels),
+            marks: Object.fromEntries(rows.map((r) => [r.label, r.marks])),
+            tidy: (t) => parseRowLabel(t)?.label ?? t.trim(),
+          }}
+          initialBoxes={rows.flatMap((r) => r.regions.map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1, label: r.label })))}
+          startPage={editor.startPage}
+          saveLabel="Save mark scheme"
+          onClose={() => setEditor(null)}
+          onSave={async (boxes, marks) => {
+            setEditor(null);
+            const byLabel = new Map<string, DrawnBox[]>();
+            for (const b of boxes) byLabel.set(b.label ?? "?", [...(byLabel.get(b.label ?? "?") ?? []), b]);
+            const body = {
+              rows: [...byLabel.entries()].map(([label, bs]) => ({
+                label,
+                marks: marks[label] ?? null,
+                boxes: bs.map(({ page, x0, y0, x1, y1 }) => ({ page, x0, y0, x1, y1 })),
+              })),
+            };
+            await run(() => call(`${base}/rows/all`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), "Mark scheme saved");
           }}
         />
       )}
@@ -415,7 +444,7 @@ export function MarkSchemeScreen({
                                   `Row ${label} linked to ${s.title}`,
                                 )
                               }
-                              onDraw={() => setDrawFor(s)}
+                              onDraw={() => setEditor({ newLabel: s.title.replace(/^Q/, ""), startPage: startPageFor(s) })}
                             />
                           </figure>
                         </div>

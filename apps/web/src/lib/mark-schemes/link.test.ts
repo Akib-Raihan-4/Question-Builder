@@ -69,3 +69,24 @@ describe("markChecks", () => {
     expect(m.get("q2")?.check).toBe("unknown");
   });
 });
+
+describe("parseRowLabel", () => {
+  it("reads the ways admins type a row label", async () => {
+    const { parseRowLabel } = await import("./link");
+    const r = (t: string) => {
+      const p = parseRowLabel(t);
+      return p && [p.question, p.part, p.label];
+    };
+    expect(r("1(a)")).toEqual([1, "a", "1(a)"]);
+    expect(r("1a")).toEqual([1, "a", "1(a)"]);
+    expect(r(" 1 (b) ")).toEqual([1, "b", "1(b)"]);
+    expect(r("Q3(b)(ii)")).toEqual([3, "b(ii)", "3(b)(ii)"]);
+    expect(r("3bii")).toEqual([3, "b(ii)", "3(b)(ii)"]);
+    expect(r("7")).toEqual([7, null, "7"]);
+    expect(r("7.")).toEqual([7, null, "7"]);
+    expect(r("4(ii)")).toEqual([4, "ii", "4(ii)"]);
+    expect(r("4(i)")).toEqual([4, "i", "4(i)"]);
+    expect(r("Notes")).toBeNull();
+    expect(r("1 (drawn)")).toBeNull();
+  });
+});

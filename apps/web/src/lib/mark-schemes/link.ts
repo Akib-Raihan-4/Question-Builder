@@ -44,6 +44,27 @@ export function linkRows(rows: ReaderRow[], questions: QuestionRef[]): LinkedRow
   });
 }
 
+/**
+ * A row label typed by an admin, read like the reader's: "1(a)(i)", "1 (a)", "1a", "Q3(b)", "7".
+ * → { question, part } with part in our format ("a(i)", "b", or "ii" for a Roman-only part);
+ * null when it doesn't start with a question number. Also gives the tidy label ("1(a)(i)").
+ */
+export function parseRowLabel(text: string): { question: number; part: string | null; label: string } | null {
+  const t = text.replace(/\s+/g, "").replace(/^Q/i, "").replace(/\.$/, "");
+  const m = t.match(/^(\d{1,2})\.?(?:\(([a-z]{1,4})\)|([a-h]))?(?:\(([ivx]{1,4})\)|([ivx]{1,4}))?$/);
+  if (!m) return null;
+  const question = Number(m[1]);
+  if (!question) return null;
+  let letter: string | undefined = m[2] ?? m[3];
+  let roman: string | undefined = m[4] ?? m[5];
+  // "(i)", "(ii)" straight after the number, with nothing after: a Roman-numbered part.
+  if (letter && m[2] && !roman && /^(?:i{1,3}|iv|vi{0,3}|ix|x)$/.test(letter)) [letter, roman] = [undefined, letter];
+  if (letter && !/^[a-h]$/.test(letter)) return null;
+  const part = letter ? letter + (roman ? `(${roman})` : "") : roman ?? null;
+  const label = `${question}${letter ? `(${letter})` : ""}${roman ? `(${roman})` : ""}`;
+  return { question, part, label };
+}
+
 /** Our part label as printed on papers: "a(ii)" → "(a)(ii)". */
 export const printedPart = (label: string) => label.replace(/^([a-z]{1,2})/, "($1)");
 

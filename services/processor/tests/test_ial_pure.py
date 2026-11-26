@@ -53,7 +53,7 @@ def test_ial_pure_ms_notes_are_cut_out_like_the_admin_did():
     from main import read_ms
 
     r = read_ms(MS_JUNE_2025.read_bytes())
-    assert r.reader_version.endswith("+ial-pure")
+    assert r.reader_version.startswith("ial-maths-ms")
     got = {x.label: [(g.page + 1, round(g.y1)) for g in x.regions] for x in r.rows}
     admin = {
         "1(a)": [(7, 173)], "1(b)": [(7, 248)], "1(c)": [(8, 180)], "1(d)": [(8, 307)], "2(a)": [(9, 171)],
