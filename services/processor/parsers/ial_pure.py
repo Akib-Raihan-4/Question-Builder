@@ -1,4 +1,5 @@
-"""Edexcel International A Level Pure Mathematics P1–P4 (WMA11–WMA14), and the older Core
+"""Edexcel International A Level Pure Mathematics P1–P4 (WMA11–WMA14), Mechanics M1 (WME01), Statistics
+S1 (WST01), and the older Core
 Mathematics C12 / C34 (WMA01 / WMA02): whole questions only.
 
 These papers have no separate answer booklet: each question starts with its bold number ("1.")
@@ -19,10 +20,13 @@ import pymupdf
 from .base import BaseParser, Question, Region
 
 # Cover: "Pure Mathematics P3", paper reference "WMA13/01".
-# Also the units before P1–P4: "Core Mathematics C12 / C34" (WMA01, WMA02), same booklet layout.
-COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\s*/\s*0?1\b|Core\s+Mathematics\s+C(?:12|34)\b|\bWMA0[12]\s*/\s*0?1\b", re.I)
-# "1." — also "3.." and "7<tab>" (a missing dot), as printed on some papers.
-START = re.compile(r"^\s*(\d{1,2})\s*(?:\.+(?:\s|$)|\t)")
+# Also the units before P1–P4: "Core Mathematics C12 / C34" (WMA01, WMA02), and Mechanics M1 /
+# Statistics S1 (WME01, WST01): same booklet layout.
+COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\s*/\s*0?1\b|Core\s+Mathematics\s+C(?:12|34)\b|\bWMA0[12]\s*/\s*0?1\b|Mechanics\s+M1\b|\bWME01\s*/\s*0?1\b|Statistics\s+S1\b|\bWST01\s*/\s*0?1\b", re.I)
+# "1." — also "3..", "7<tab>" (a missing dot) and "1:", as printed on some papers.
+START = re.compile(r"^\s*(\d{1,2})\s*(?:\.+(?:\s|$)|\t|:)")
+# A number alone on its line followed by a tab ("5<tab>") is a question number, not a page number.
+BARE_START = re.compile(r"^\s*(\d{1,2})\t\s*$")
 CONTINUED = re.compile(r"^\s*Question\s+(\d{1,2})\s+continued", re.I)
 TOTAL = re.compile(r"\(\s*Total\s+for\s+Question\s+(\d+)\s+(?:is|=)\s+(\d+)\s+marks?\s*\)", re.I)
 # Older papers (to 2022): "(Total 6 marks)" — the question is the one being answered.
@@ -41,7 +45,7 @@ def is_ial_pure(doc: pymupdf.Document) -> bool:
 class IalPureParser(BaseParser):
     old = False  # set per paper in find_questions
     key = "edexcel"  # same family: papers keep parser key "edexcel"; the version says which ran
-    version = "ial-pure-1.0.0"
+    version = "ial-pure-1.1.0"
 
     # Crop from just right of the number column to just left of the margin strip (like edexcel.py).
     crop_x0 = 59.0
@@ -59,10 +63,13 @@ class IalPureParser(BaseParser):
         out = []
         for b in page.get_text("dict")["blocks"]:
             for ln in b.get("lines", []):
-                text = "".join(s["text"] for s in ln["spans"]).strip()
+                raw = "".join(s["text"] for s in ln["spans"])
+                text = raw.strip()
                 if not text:
                     continue
                 x0, y0, x1, y1 = ln["bbox"]
+                if (b := BARE_START.match(raw)) and x0 <= IalPureParser.number_x_max and y0 < 792:
+                    text = b.group(1) + "."
                 # Rotated margin text ("DO NOT WRITE IN THIS AREA") and the barcode/page-number footer.
                 if ln.get("dir", (1, 0))[0] < 0.9 or FURNITURE.search(text) or y0 > 792:
                     continue

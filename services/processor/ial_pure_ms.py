@@ -15,7 +15,7 @@ import pymupdf
 
 from ms_reader import MsResult, MsRow
 
-COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\b|Core\s+Mathematics\s+C(?:12|34)\b|\bWMA0[12]\b", re.I)
+COVER = re.compile(r"Pure\s+Mathematics\s+P[1-4]\b|\bWMA1[1-4]\b|Core\s+Mathematics\s+C(?:12|34)\b|\bWMA0[12]\b|Mechanics\s+M1\b|\bWME01\b|Statistics\s+S1\b|\bWST01\b", re.I)
 # A note entry at the left margin: "M1:", "dM1:", "A1*:", "B1ft:", "SC:", "Notes:", "Note:".
 NOTE_START = re.compile(r"^(?:Notes?|d{0,2}[MABE]\d*\*?(?:ft)?|SC|B\d)\s*:?$", re.I)
 LEFT = 60.0  # note entries start at x ≈ 34–55
