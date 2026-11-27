@@ -200,7 +200,8 @@ export function MarkSchemeScreen({
                 Edit mark scheme
               </Button>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>Replace PDF</Button>
-              <Button variant="ghost" size="sm" disabled={busy || ms.status === "processing"} onClick={() => run(() => call(`${base}/reprocess`, { method: "POST" }), "Reading again…")}>
+              {/* Not blocked while "processing": a read cut off by the time limit stays that way. */}
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(() => call(`${base}/reprocess`, { method: "POST" }), "Reading again…")}>
                 Re-read
               </Button>
               <Button

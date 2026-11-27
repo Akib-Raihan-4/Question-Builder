@@ -29,13 +29,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!bp.items.length) return NextResponse.json({ error: "Add some questions first" }, { status: 400 });
 
   const bank = Object.fromEntries(bp.bank.map((q) => [q.id, q]));
-  const items = bp.items.filter((i) => bank[i.questionId]);
-  const paperIds = [...new Set(items.map((i) => bank[i.questionId].paperId))];
   const files = await db
-    .select({ id: schema.papers.id, fileKey: schema.papers.fileKey })
+    .select({ id: schema.papers.id, fileKey: schema.papers.fileKey, status: schema.papers.status })
     .from(schema.papers)
-    .where(inArray(schema.papers.id, paperIds));
-  const keyOf = new Map(files.map((f) => [f.id, f.fileKey]));
+    .where(inArray(schema.papers.id, [...new Set(bp.bank.map((q) => q.paperId))]));
+  const keyOf = new Map(files.filter((f) => f.status === "published" || u.role === "admin").map((f) => [f.id, f.fileKey]));
+  // Teachers: questions of a paper an admin has since unpublished are left out.
+  const items = bp.items.filter((i) => bank[i.questionId] && keyOf.has(bank[i.questionId].paperId));
+  if (!items.length) return NextResponse.json({ error: "These questions are no longer available" }, { status: 400 });
 
   const url = new URL(req.url);
   const format = url.searchParams.get("format") === "docx" ? "docx" : "pdf";

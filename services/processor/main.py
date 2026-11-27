@@ -4,6 +4,7 @@ import os
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from cover import read_cover
 from docx_export import DocxSpec, build_docx
@@ -31,22 +32,23 @@ def health() -> dict:
     return {"ok": True, "parsers": {**{k: p.version for k, p in PARSERS.items()}, "edexcel-ial-pure": IalPureParser.version}}
 
 
+# Plain `def` handlers: FastAPI runs them in worker threads, so one slow PDF doesn't hold up the rest.
 @app.post("/segment/qp", response_model=SegmentResult, dependencies=[Depends(require_key)])
-async def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) -> SegmentResult:
+def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) -> SegmentResult:
     try:
         get_parser(parser_key)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    data = await file.read()
+    data = file.file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return parser_for(parser_key, data).segment(data)
 
 
 @app.post("/segment/ms", response_model=MsResult, dependencies=[Depends(require_key)])
-async def segment_ms(file: UploadFile = File(...)) -> MsResult:
+def segment_ms(file: UploadFile = File(...)) -> MsResult:
     """Rows of a mark scheme (one per question part) as regions on the mark scheme PDF."""
-    data = await file.read()
+    data = file.file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return read_ms(data)
@@ -72,18 +74,18 @@ def read_ms(data: bytes) -> MsResult:
 
 
 @app.post("/layout", response_model=LayoutResult, dependencies=[Depends(require_key)])
-async def layout(file: UploadFile = File(...)) -> LayoutResult:
+def layout(file: UploadFile = File(...)) -> LayoutResult:
     """Where text, drawings and answer dots are on every page (for removing answer space)."""
-    data = await file.read()
+    data = file.file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return paper_layout(data)
 
 
 @app.post("/inspect", dependencies=[Depends(require_key)])
-async def inspect(file: UploadFile = File(...)) -> dict:
+def inspect(file: UploadFile = File(...)) -> dict:
     """Paper details read from the cover page, to pre-fill the upload form."""
-    data = await file.read()
+    data = file.file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
     return read_cover(data)
@@ -109,7 +111,8 @@ async def export_docx(request: Request) -> Response:
         f = form.get(name)
         return await f.read() if f is not None and hasattr(f, "read") else None
 
-    data = build_docx(spec, pdfs, logo=await file_bytes("logo"), watermark_logo=await file_bytes("watermark_logo"))
+    logo, watermark = await file_bytes("logo"), await file_bytes("watermark_logo")
+    data = await run_in_threadpool(build_docx, spec, pdfs, logo=logo, watermark_logo=watermark)
     return Response(
         data,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

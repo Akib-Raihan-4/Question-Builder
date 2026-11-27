@@ -1,0 +1,30 @@
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  processor:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # as in the Dockerfile
+          cache: pip
+          cache-dependency-path: services/processor/requirements.txt
+      - run: pip install -r requirements.txt
+      # Tests on real papers skip themselves: the samples aren't committed.
+      - run: python -m pytest -q
