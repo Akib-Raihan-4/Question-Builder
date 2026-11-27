@@ -23,5 +23,14 @@ def test_key_required_when_configured(monkeypatch):
 
 def test_no_key_configured_is_open_for_local_dev(monkeypatch):
     monkeypatch.delenv("PROCESSOR_KEY", raising=False)
+    monkeypatch.delenv("RENDER", raising=False)
     r = TestClient(app).post("/inspect", files={"file": ("a.pdf", _pdf(), "application/pdf")})
     assert r.status_code == 200
+
+
+def test_no_key_on_render_is_refused(monkeypatch):
+    monkeypatch.delenv("PROCESSOR_KEY", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    client = TestClient(app)
+    assert client.get("/health").status_code == 200
+    assert client.post("/inspect", files={"file": ("a.pdf", _pdf(), "application/pdf")}).status_code == 503

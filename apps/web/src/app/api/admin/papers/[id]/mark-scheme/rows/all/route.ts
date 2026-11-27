@@ -85,6 +85,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   });
 
   await db.transaction(async (tx) => {
+    // Waits for a Re-read or another save of this mark scheme to finish first (see readMarkScheme).
+    await tx.select({ id: schema.markSchemes.id }).from(schema.markSchemes).where(eq(schema.markSchemes.id, ms.id)).for("update");
     await tx.delete(schema.msRegions).where(eq(schema.msRegions.markSchemeId, ms.id));
     if (values.length) await tx.insert(schema.msRegions).values(values);
   });

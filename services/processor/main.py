@@ -20,6 +20,8 @@ def require_key(x_processor_key: str | None = Header(default=None)) -> None:
     """When PROCESSOR_KEY is set (always, when hosted), every call except /health must send it.
     The processor handles copyrighted papers, so it must not be usable by anyone who finds it."""
     expected = os.environ.get("PROCESSOR_KEY")
+    if not expected and os.environ.get("RENDER"):  # hosted without its key: refuse, don't run open
+        raise HTTPException(503, "PROCESSOR_KEY is not set on the processor")
     if expected and not hmac.compare_digest(x_processor_key or "", expected):
         raise HTTPException(401, "Missing or wrong X-Processor-Key")
 

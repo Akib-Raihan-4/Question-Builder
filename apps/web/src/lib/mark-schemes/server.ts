@@ -101,6 +101,8 @@ export async function readMarkScheme(paperId: string) {
   const refs = await questionRefs(paperId);
   const linked = linkRows(result.rows, refs);
   await db.transaction(async (tx) => {
+    // One save per mark scheme at a time: a second Re-read waits here, then replaces these rows.
+    await tx.select({ id: schema.markSchemes.id }).from(schema.markSchemes).where(eq(schema.markSchemes.id, ms.id)).for("update");
     const kept = await tx
       .select({ label: schema.msRegions.label })
       .from(schema.msRegions)

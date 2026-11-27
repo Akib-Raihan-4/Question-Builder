@@ -82,6 +82,8 @@ async function syncRegions(tx: Tx, ownerType: "question" | "part", ownerId: stri
  */
 export async function saveSegmentResult(paperId: string, r: SegmentResult) {
   await db.transaction(async (tx) => {
+    // One save per paper at a time: a second Re-run waits here, then updates instead of adding again.
+    await tx.select({ id: schema.papers.id }).from(schema.papers).where(eq(schema.papers.id, paperId)).for("update");
     const existing = await tx.select().from(schema.questions).where(eq(schema.questions.paperId, paperId));
     const byNumber = new Map(existing.map((q) => [q.number, q]));
     const seen = new Set<string>();

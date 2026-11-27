@@ -39,8 +39,12 @@ export const auth = betterAuth({
       session: schema.session,
       account: schema.account,
       verification: schema.verification,
+      rateLimit: schema.rateLimit,
     },
   }),
+  // Counted in the database: Vercel runs many short-lived processes, and per-process memory
+  // would start every one of them at zero.
+  rateLimit: { storage: "database" },
   emailAndPassword: {
     enabled: true,
     // Teachers may sign up, but the account stays "pending" (no access) until an admin approves it.
