@@ -56,7 +56,7 @@ def read_ms(data: bytes) -> MsResult:
     """The general reader — except IAL Mathematics mark schemes (P1–P4, C12/C34, M1, S1), which are
     read by their ruled tables (ial_maths_ms.py). If the general reader (notes cut out) finds a
     question that the table reader skipped (a mark scheme without table lines), that is used
-    instead; questions it finds beyond the last one are not counted (stray rows such as "12")."""
+    instead; a gap two or more past the last question is a stray row (a "12" on a 10-question paper)."""
     result = read_mark_scheme(data)
     if result.status == "ok":
         doc = pymupdf.open(stream=data, filetype="pdf")
@@ -66,7 +66,7 @@ def read_ms(data: bytes) -> MsResult:
             tables = read_ial_maths_ms(doc)
             found = {r.question for r in tables.rows}
             gaps = {r.question for r in result.rows} - found
-            if found and not any(q < max(found) for q in gaps):
+            if found and not any(q <= max(found) + 1 for q in gaps):
                 result = tables
     return result
 
