@@ -40,8 +40,26 @@ export async function questionRefs(paperId: string): Promise<QuestionRef[]> {
   return qs.map((q) => ({ ...q, parts: parts.filter((p) => p.questionId === q.id).map(({ id, label, marks }) => ({ id, label, marks })) }));
 }
 
+/**
+ * The PDF with sideways pages turned upright (some mark schemes print landscape tables on portrait
+ * pages), so the stored file, its boxes and what teachers see agree. The original if the processor
+ * has nothing to turn — or can't be reached: the file still uploads, just as it came.
+ */
+export async function uprightPdf(bytes: Uint8Array): Promise<Uint8Array> {
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([bytes as BlobPart], { type: "application/pdf" }), "ms.pdf");
+    const res = await processorFetch("/upright", { method: "POST", body: form });
+    return res.status === 200 ? new Uint8Array(await res.arrayBuffer()) : bytes;
+  } catch (e) {
+    console.error("[mark-scheme] upright failed; keeping the file as uploaded", e);
+    return bytes;
+  }
+}
+
 /** Save (or replace) a paper's mark scheme file and read it in the background. */
-export async function saveMarkScheme(paperId: string, bytes: Uint8Array, filename: string | null, userId: string) {
+export async function saveMarkScheme(paperId: string, uploaded: Uint8Array, filename: string | null, userId: string) {
+  const bytes = await uprightPdf(uploaded);
   const [old] = await db.select({ fileKey: schema.markSchemes.fileKey }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, paperId));
   const key = msFileKey(paperId);
   await putPdf(key, bytes);

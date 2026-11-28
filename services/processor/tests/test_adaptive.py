@@ -97,3 +97,39 @@ def test_chemistry_unit_1_needs_no_rules(pdf):
     assert r.parser_version.startswith("adaptive")
     assert sum(q.total_marks for q in r.questions) == 80
     assert all(q.regions for q in r.questions)
+
+
+def test_parts_found_and_add_up():
+    data = paper(QS)
+    _, r = read(data)
+    by = {q.number: q for q in r.questions}
+    assert [(p.label, p.marks) for p in by[3].parts] == [("a", 4), ("b", 2), ("c", 1)]
+    assert sum(p.marks for p in by[1].parts) == by[1].total_marks
+    assert not by[2].parts  # a single part: the question stays whole
+    for q in r.questions:
+        for p in q.parts:  # each part's box sits inside its question's
+            assert p.regions and all(any(g.page == h.page and h.y0 - 1 <= g.y0 and g.y1 <= h.y1 + 1 for h in q.regions) for g in p.regions)
+
+
+def test_sideways_pages_are_turned_upright_once():
+    from collections import Counter
+
+    from upright import upright
+
+    doc = pymupdf.open()
+    for _ in range(2):
+        page = doc.new_page()
+        for k in range(12):  # a landscape table printed sideways: text running bottom to top
+            page.insert_text((80 + 30 * k, 700), f"Question {k + 1} answer and guidance", rotate=90, fontsize=10)
+    turned = upright(doc.tobytes())
+    assert turned is not None
+    d = pymupdf.open(stream=turned)
+    for p in d:
+        dirs = Counter()
+        for b in p.get_text("dict")["blocks"]:
+            for ln in b.get("lines", []):
+                v = pymupdf.Point(ln["dir"]) * p.rotation_matrix - pymupdf.Point(0, 0) * p.rotation_matrix
+                dirs[(round(v.x), round(v.y))] += 1
+        assert dirs.most_common(1)[0][0] == (1, 0)  # reads normally as displayed
+    assert upright(turned) is None  # nothing left to turn
+    assert upright(paper(QS)) is None  # an upright paper is left alone

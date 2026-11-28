@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../src/db";
-import { msFileKey, readMarkScheme } from "../src/lib/mark-schemes/server";
+import { msFileKey, readMarkScheme, uprightPdf } from "../src/lib/mark-schemes/server";
 import { deleteObject, putPdf } from "../src/lib/storage";
 
 async function main() {
@@ -42,7 +42,7 @@ async function main() {
       console.log(`- ${name}: no ${code} ${m[1]} ${m[2]} paper`);
       continue;
     }
-    const bytes = new Uint8Array(readFileSync(join(folder, name)));
+    const bytes = await uprightPdf(new Uint8Array(readFileSync(join(folder, name))));
     const [old] = await db.select({ fileKey: schema.markSchemes.fileKey }).from(schema.markSchemes).where(eq(schema.markSchemes.paperId, paper.id));
     const fileKey = msFileKey(paper.id);
     await putPdf(fileKey, bytes);

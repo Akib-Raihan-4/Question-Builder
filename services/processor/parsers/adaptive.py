@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import pymupdf
 
-from .base import BaseParser, Question, Region, SegmentResult
+from .base import BaseParser, Part, Question, Region, SegmentResult
 
 
 @dataclass
@@ -159,16 +159,23 @@ def printed_totals(lines: list[Line], question_pattern: str | None = None) -> se
     }
 
 
-def part_marks(chain, lines: list[Line], width: float) -> dict[int, int]:
-    """Each question's part marks added up — for a question whose total line can't be read.
-    The mark style is learned: the short bits at the right edge with a number in them ("(3)",
-    "[2]"), the commonest shape of those."""
-    right = [l for l in lines if l.x0 > width * 0.65 and len(l.text.strip()) <= 6 and re.search(r"\d", l.text)]
+def mark_lines(lines: list[Line], width: float) -> list[Line]:
+    """The paper's part marks. The style is learned: the short bits at the right edge with a
+    number in them ("(3)", "[2]"), the commonest shape of those."""
+    # A bare number is a graph axis, a diagram label or a page number; marks have something round
+    # the number: "(3)", "[3]".
+    right = [l for l in lines if l.x0 > width * 0.65 and len(l.text.strip()) <= 6 and re.search(r"\d", l.text) and re.search(r"[^\d\s]", l.text)]
     shapes = defaultdict(list)
     for l in right:
         shapes[pattern(l.text)].append(l)
     style = max(shapes.values(), key=len, default=[])
-    if len(style) < 3:
+    return style if len(style) >= 3 else []
+
+
+def part_marks(chain, lines: list[Line], width: float) -> dict[int, int]:
+    """Each question's part marks added up — for a question whose total line can't be read."""
+    style = mark_lines(lines, width)
+    if not style:
         return {}
     starts = [(l.page, l.y0) for _, l in chain] + [(10**6, 0)]
     out = {}
@@ -177,6 +184,53 @@ def part_marks(chain, lines: list[Line], width: float) -> dict[int, int]:
         if got:
             out[n] = sum(got)
     return out
+
+
+LETTER = re.compile(r"^\(([a-h])\)")
+ROMAN = re.compile(r"^\((i{1,3}|iv|v|vi{1,3}|ix|x)\)")
+
+
+def find_parts(lines: list[Line], marks: list[Line], start: Line, left: float, total: int):
+    """The question's parts — labels "(a)", "(b)", "(i)" at the left of the question, each "(N)"
+    mark going to the part above it. → [(label, marks, first line)], or [] unless every part has
+    marks and they add up to the question's total."""
+    parts: list[dict] = []  # in order: {"label", "letter", "line", "marks"}
+    letter = None
+    for l in lines:
+        if l == start:  # (same line, read separately)
+            t = LEAD.sub("", l.text.strip(), count=1).strip()  # "1. (a) Find …": after the number
+        elif l.x0 <= left + 60:
+            t = l.text.strip()
+        else:
+            continue  # "(a)" inside the text or an answer option, not a label
+        while True:  # a line can hold more than one label: "(a)(i)", "(b) (ii)"
+            if m := ROMAN.match(t):
+                label = f"{letter}({m.group(1)})" if letter else m.group(1)
+                prev = parts[-1] if parts else None
+                if prev and prev["label"] == letter and prev["letter"] == letter:
+                    prev["label"] = label  # "(a)" straight followed by "(i)": the part is a(i)
+                else:
+                    parts.append({"label": label, "letter": letter, "line": l, "marks": 0})
+            elif m := LETTER.match(t):
+                letter = m.group(1)
+                parts.append({"label": letter, "letter": letter, "line": l, "marks": 0})
+            else:
+                break
+            t = t[m.end():].strip()
+    # Labels must run in order (a, b, c …) and each appear once.
+    letters = [p["letter"] for p in parts if p["letter"]]
+    if len(parts) < 2 or letters != sorted(letters) or len({p["label"] for p in parts}) != len(parts):
+        return []
+    for mk in marks:
+        owner = None
+        for p in parts:
+            if (p["line"].page, p["line"].y0) <= (mk.page, mk.y0 + 2):
+                owner = p
+        if owner:
+            owner["marks"] += int(re.search(r"\d+", mk.text).group())
+    if not all(p["marks"] for p in parts) or sum(p["marks"] for p in parts) != total:
+        return []
+    return [(p["label"], p["marks"], p["line"]) for p in parts]
 
 
 @dataclass
@@ -239,6 +293,7 @@ class AdaptiveParser(BaseParser):
         # drawings, not text): the top and bottom most pages' text reaches.
         firsts = sorted(min(l.y0 for l in ls) for ls in by_page.values())
         lasts = sorted(max(l.y1 for l in ls) for ls in by_page.values())
+        marks = mark_lines([l for l in lines if l.page > 0], doc[0].rect.width)
         usual_top = firsts[len(firsts) // 10] - 2 if firsts else 50
         usual_bottom = lasts[int(len(lasts) * 0.9)] + 4 if lasts else doc[0].rect.height - 50
         # Left edge: just right of the question numbers (the builder prints its own); right edge:
@@ -276,6 +331,23 @@ class AdaptiveParser(BaseParser):
                 if bottom - top > 8:
                     regions.append(Region(page=p, x0=round(x0, 2), y0=round(top, 2), x1=round(x1, 2), y1=round(bottom, 2)))
                     text += [l.text.strip() for l in here if top <= l.y0 < bottom]
+            parts = []
+            span = [l for g in regions for l in by_page.get(g.page, []) if g.y0 - 1 <= l.y0 < g.y1] if regions else []
+            if start not in span:
+                span = [start] + span
+            in_q = [mk for g in regions for mk in marks if mk.page == g.page and g.y0 <= mk.y0 < g.y1]
+            found = find_parts(span, in_q, start, x0, r.marks.get(n, 0))
+            for k2, (label, pm, first) in enumerate(found):
+                nxt_p = found[k2 + 1][2] if k2 + 1 < len(found) else None
+                lo = (first.page, first.y0 - 3)
+                hi = (nxt_p.page, nxt_p.y0 - 3) if nxt_p else (10**6, 0)
+                pregs = []
+                for g in regions:
+                    top = max(g.y0, lo[1]) if g.page == lo[0] else g.y0
+                    bot = min(g.y1, hi[1]) if g.page == hi[0] else g.y1
+                    if lo[0] <= g.page <= hi[0] and bot - top > 8:
+                        pregs.append(Region(page=g.page, x0=g.x0, y0=round(top, 2), x1=g.x1, y1=round(bot, 2)))
+                parts.append(Part(label=label, marks=pm, regions=pregs))
             questions.append(
                 Question(
                     number=n,
@@ -284,7 +356,7 @@ class AdaptiveParser(BaseParser):
                     text=re.sub(r"\s+", " ", " ".join(text))[:4000],
                     warnings=[] if total else [f"No total line found for question {n}: marks are its parts added up, and its box runs to the next question — check both"],
                     regions=regions,
-                    parts=[],
+                    parts=parts,
                 )
             )
         return questions

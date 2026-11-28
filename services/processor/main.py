@@ -14,6 +14,7 @@ from parsers.base import SegmentResult
 from ial_maths_ms import read_ial_maths_ms
 from ial_pure_ms import is_ial_pure_ms, tidy_rows
 from page_layout import LayoutResult, paper_layout
+from upright import upright
 from ms_reader import MsResult, read_mark_scheme
 
 def require_key(x_processor_key: str | None = Header(default=None)) -> None:
@@ -73,6 +74,17 @@ def read_ms(data: bytes) -> MsResult:
             if found and not any(q <= max(found) + 1 for q in gaps):
                 result = tables
     return result
+
+
+@app.post("/upright", dependencies=[Depends(require_key)])
+def upright_pdf(file: UploadFile = File(...)) -> Response:
+    """The PDF with sideways pages turned upright (mark schemes with landscape tables), or
+    204 No Content when every page already reads normally."""
+    data = file.file.read()
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, "Not a PDF")
+    out = upright(data)
+    return Response(status_code=204) if out is None else Response(out, media_type="application/pdf")
 
 
 @app.post("/layout", response_model=LayoutResult, dependencies=[Depends(require_key)])
