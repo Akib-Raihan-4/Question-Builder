@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from cover import read_cover
 from docx_export import DocxSpec, build_docx
-from parsers import PARSERS, IalPureParser, get_parser, parser_for
+from parsers import PARSERS, IalPureParser, get_parser, parser_for, segment
 import pymupdf
 from parsers.base import SegmentResult
 from ial_maths_ms import read_ial_maths_ms
@@ -44,7 +44,7 @@ def segment_qp(parser_key: str = Form(...), file: UploadFile = File(...)) -> Seg
     data = file.file.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "Not a PDF")
-    return parser_for(parser_key, data).segment(data)
+    return segment(parser_key, data)
 
 
 @app.post("/segment/ms", response_model=MsResult, dependencies=[Depends(require_key)])
